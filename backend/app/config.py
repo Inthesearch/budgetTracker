@@ -23,16 +23,20 @@ class Settings(BaseSettings):
     # Application
     debug: bool = os.getenv("DEBUG", "True").lower() == "true"
     
+    print(f"CORS Origins: {os.getenv("CORS_ORIGINS")}")
+
     # CORS Origins - handle both environment variable and default list
     @property
     def cors_origins(self) -> List[str]:
         cors_env = os.getenv("CORS_ORIGINS")
         if cors_env:
             # If CORS_ORIGINS is set, try to parse it as comma-separated values
-            return [origin.strip() for origin in cors_env.split(",")]
+            origins = [origin.strip() for origin in cors_env.split(",")]
+            print(f"CORS Origins from environment: {origins}")
+            return origins
         else:
             # Default origins for development
-            return [
+            default_origins = [
                 "http://localhost:3000",
                 "http://127.0.0.1:3000",
                 "http://localhost:5173",
@@ -40,8 +44,15 @@ class Settings(BaseSettings):
                 "http://localhost:3001",
                 "http://127.0.0.1:3001",
                 "http://localhost:8080",
-                "http://127.0.0.1:8080"
+                "http://127.0.0.1:8080",
+                # Add common production domains
+                "https://budget-tracker-frontend.vercel.app",
+                "https://budget-tracker-frontend.netlify.app",
+                "https://budget-tracker-app.vercel.app",
+                "https://budget-tracker-app.netlify.app"
             ]
+            print(f"CORS Origins (default): {default_origins}")
+            return default_origins
     
     class Config:
         env_file = ".env"

@@ -33,13 +33,16 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS middleware
+# CORS middleware with detailed configuration
+print(f"Configuring CORS with origins: {settings.cors_origins}")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Include routers
@@ -63,6 +66,15 @@ async def root():
 async def health_check():
     """Health check endpoint."""
     return {"status": "healthy", "message": "API is running"}
+
+@app.get("/cors-test")
+async def cors_test():
+    """Test endpoint to check CORS configuration."""
+    return {
+        "message": "CORS test successful",
+        "allowed_origins": settings.cors_origins,
+        "timestamp": "2024-01-01T00:00:00Z"
+    }
 
 # Global exception handler
 @app.exception_handler(HTTPException)
