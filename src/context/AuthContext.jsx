@@ -14,6 +14,9 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // API Base URL - Production
+  const API_BASE_URL = 'https://budgettracker-yiw5.onrender.com';
+
   useEffect(() => {
     // Check if user is logged in from localStorage
     const savedUser = localStorage.getItem('user');
@@ -26,7 +29,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
-      const response = await fetch('http://localhost:8000/api/v1/login', {
+      const response = await fetch(`${API_BASE_URL}/api/v1/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -58,7 +61,7 @@ export const AuthProvider = ({ children }) => {
 
   const forgotPassword = async (email) => {
     try {
-      const response = await fetch('http://localhost:8000/api/v1/forgotPass', {
+      const response = await fetch(`${API_BASE_URL}/api/v1/forgotPass`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -81,7 +84,7 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (userData) => {
     try {
-      const response = await fetch('http://localhost:8000/api/v1/register', {
+      const response = await fetch(`${API_BASE_URL}/api/v1/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

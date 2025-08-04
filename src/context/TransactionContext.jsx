@@ -19,6 +19,9 @@ export const TransactionProvider = ({ children }) => {
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
 
+  // API Base URL - Production
+  const API_BASE_URL = 'https://budgettracker-yiw5.onrender.com';
+
   // Get auth token
   const getAuthHeaders = () => {
     const token = localStorage.getItem('token');
@@ -47,7 +50,7 @@ export const TransactionProvider = ({ children }) => {
     
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8000/api/v1/transaction/getTransactionRecord', {
+      const response = await fetch(`${API_BASE_URL}/api/v1/transaction/getTransactionRecord`, {
         method: 'GET',
         headers: getAuthHeaders(),
       });
@@ -75,7 +78,7 @@ export const TransactionProvider = ({ children }) => {
     if (!user || !localStorage.getItem('token')) return;
     
     try {
-      const response = await fetch('http://localhost:8000/api/v1/category/list', {
+      const response = await fetch(`${API_BASE_URL}/api/v1/category/list`, {
         method: 'GET',
         headers: getAuthHeaders(),
       });
@@ -108,7 +111,7 @@ export const TransactionProvider = ({ children }) => {
       for (const category of categoriesList) {
         const categoryId = typeof category === 'string' ? null : category.id;
         if (categoryId) {
-          const response = await fetch(`http://localhost:8000/api/v1/subcategory/list/${categoryId}`, {
+          const response = await fetch(`${API_BASE_URL}/api/v1/subcategory/list/${categoryId}`, {
             method: 'GET',
             headers: getAuthHeaders(),
           });
@@ -130,7 +133,7 @@ export const TransactionProvider = ({ children }) => {
     if (!user || !localStorage.getItem('token')) return;
     
     try {
-      const response = await fetch('http://localhost:8000/api/v1/account/list', {
+      const response = await fetch(`${API_BASE_URL}/api/v1/account/list`, {
         method: 'GET',
         headers: getAuthHeaders(),
       });
@@ -158,7 +161,7 @@ export const TransactionProvider = ({ children }) => {
     
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8000/api/v1/transaction/addTransaction', {
+      const response = await fetch(`${API_BASE_URL}/api/v1/transaction/addTransaction`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify(transactionData),
@@ -197,7 +200,7 @@ export const TransactionProvider = ({ children }) => {
     
     setLoading(true);
     try {
-      const response = await fetch(`http://localhost:8000/api/v1/transaction/editTransaction/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/v1/transaction/editTransaction/${id}`, {
         method: 'PUT',
         headers: getAuthHeaders(),
         body: JSON.stringify(transactionData),
@@ -236,7 +239,7 @@ export const TransactionProvider = ({ children }) => {
     
     setLoading(true);
     try {
-      const response = await fetch(`http://localhost:8000/api/v1/transaction/deleteTransaction/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/v1/transaction/deleteTransaction/${id}`, {
         method: 'PUT',
         headers: getAuthHeaders(),
       });
@@ -287,7 +290,7 @@ export const TransactionProvider = ({ children }) => {
       if (filters.page) params.append('page', filters.page);
       if (filters.size) params.append('size', filters.size);
 
-      const response = await fetch(`http://localhost:8000/api/v1/transaction/getTransactionRecord?${params}`, {
+      const response = await fetch(`${API_BASE_URL}/api/v1/transaction/getTransactionRecord?${params}`, {
         method: 'GET',
         headers: getAuthHeaders(),
       });
@@ -319,7 +322,7 @@ export const TransactionProvider = ({ children }) => {
     }
     
     try {
-      const response = await fetch('http://localhost:8000/api/v1/category/addCategory', {
+      const response = await fetch(`${API_BASE_URL}/api/v1/category/addCategory`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify(categoryData),
@@ -354,7 +357,7 @@ export const TransactionProvider = ({ children }) => {
     }
     
     try {
-      const response = await fetch('http://localhost:8000/api/v1/subcategory/addSubCategory', {
+      const response = await fetch(`${API_BASE_URL}/api/v1/subcategory/addSubCategory`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify(subCategoryData),
@@ -390,7 +393,7 @@ export const TransactionProvider = ({ children }) => {
     }
     
     try {
-      const response = await fetch('http://localhost:8000/api/v1/account/addAccount', {
+      const response = await fetch(`${API_BASE_URL}/api/v1/account/addAccount`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify(accountData),
