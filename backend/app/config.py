@@ -22,16 +22,26 @@ class Settings(BaseSettings):
     
     # Application
     debug: bool = os.getenv("DEBUG", "True").lower() == "true"
-    cors_origins: List[str] = [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3001",
-        "http://127.0.0.1:3001",
-        "http://localhost:8080",
-        "http://127.0.0.1:8080"
-    ]
+    
+    # CORS Origins - handle both environment variable and default list
+    @property
+    def cors_origins(self) -> List[str]:
+        cors_env = os.getenv("CORS_ORIGINS")
+        if cors_env:
+            # If CORS_ORIGINS is set, try to parse it as comma-separated values
+            return [origin.strip() for origin in cors_env.split(",")]
+        else:
+            # Default origins for development
+            return [
+                "http://localhost:3000",
+                "http://127.0.0.1:3000",
+                "http://localhost:5173",
+                "http://127.0.0.1:5173",
+                "http://localhost:3001",
+                "http://127.0.0.1:3001",
+                "http://localhost:8080",
+                "http://127.0.0.1:8080"
+            ]
     
     class Config:
         env_file = ".env"
