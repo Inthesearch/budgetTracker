@@ -21,6 +21,8 @@ security = HTTPBearer()
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash."""
     # return plain_password == hashed_password
+    print(f"plain_pasword {pwd_context.hash(plain_password)}")
+    print(f"hashed_password {hashed_password}")
     return pwd_context.verify(plain_password, hashed_password)
 
 def get_password_hash(password: str) -> str:
