@@ -6,7 +6,8 @@ import uvicorn
 from sqlalchemy import inspect
 
 from .config import settings
-from .database import engine, Base, sync_engine
+from .database import engine, Base
+# from .database import sync_engine  # Not needed for async-only codebase
 from .routers import auth, category, subcategory, transaction, account
 
 @asynccontextmanager
