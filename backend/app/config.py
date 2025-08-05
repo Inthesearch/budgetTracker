@@ -3,7 +3,34 @@ from typing import List
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+# Debug: Check current working directory and .env file
+print(f"Current working directory: {os.getcwd()}")
+
+# Check if we're in production (Render sets RENDER=true)
+is_production = os.getenv("RENDER", "false").lower() == "true"
+print(f"Running in production: {is_production}")
+
+# Try to load .env file (only in development)
+if not is_production:
+    print(f"Loading .env file for development...")
+    load_dotenv()
+    
+    # Also try loading from specific path
+    import pathlib
+    backend_dir = pathlib.Path(__file__).parent.parent
+    env_path = backend_dir / ".env"
+    print(f"Looking for .env at: {env_path}")
+    if env_path.exists():
+        print(f".env file exists at {env_path}")
+        load_dotenv(env_path)
+    else:
+        print(f".env file does not exist at {env_path}")
+else:
+    print(f"In production - using environment variables from platform")
+
+# Debug: Check if DATABASE_URL is loaded
+database_url_from_env = os.getenv("DATABASE_URL")
+print(f"DATABASE_URL from environment: {database_url_from_env}")
 
 class Settings(BaseSettings):
     # Database

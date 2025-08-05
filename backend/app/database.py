@@ -39,6 +39,7 @@ def clean_database_url(url: str) -> str:
 # For async operations (PostgreSQL)
 if settings.database_url.startswith("postgresql"):
     try:
+        print("=== Starting PostgreSQL connection setup ===")
         # Clean the URL for asyncpg
         clean_sync_url = clean_database_url(settings.database_url)
         async_database_url = clean_sync_url.replace("postgresql://", "postgresql+asyncpg://")
@@ -47,30 +48,26 @@ if settings.database_url.startswith("postgresql"):
         print(f"Clean sync URL: {clean_sync_url}")
         print(f"Async database URL: {async_database_url}")
         
-        # Create sync engine for migrations and sync operations
-        sync_engine = create_engine(
-            clean_sync_url, 
-            echo=settings.debug,
-            connect_args={}
-        )
-        
-        # Create async engine
+        print("Creating async engine only (skipping sync engine)...")
+        # Create async engine only - avoid psycopg2 issues
         engine = create_async_engine(
             async_database_url, 
             echo=settings.debug,
             pool_pre_ping=True,
             pool_recycle=300
         )
+        print("Async engine created successfully")
+        
         AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-
-        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
         
         print("PostgreSQL connection configured successfully")
         print(f"Database URL: {settings.database_url}")
         print(f"Engine type: {type(engine)}")
+        print("=== PostgreSQL setup completed ===")
         
     except Exception as e:
         print(f"PostgreSQL connection failed: {e}")
+        print(f"Exception type: {type(e).__name__}")
         print("Falling back to SQLite for development")
         print(f"Original database URL: {settings.database_url}")
         
@@ -96,10 +93,5 @@ async def get_db():
         finally:
             await session.close()
 
-# For sync operations (when needed)
-def get_sync_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close() 
+# Note: Sync database operations removed to avoid psycopg2 compatibility issues
+# All operations should use async sessions 
