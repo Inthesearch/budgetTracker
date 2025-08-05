@@ -40,13 +40,12 @@ def clean_database_url(url: str) -> str:
 if settings.database_url.startswith("postgresql"):
     try:
         print("=== Starting PostgreSQL connection setup ===")
-        # Clean the URL for asyncpg
+        # Clean the URL for pg8000
         clean_sync_url = clean_database_url(settings.database_url)
-        async_database_url = clean_sync_url.replace("postgresql://", "postgresql+asyncpg://")
         
         print(f"Original database URL: {settings.database_url}")
         print(f"Clean sync URL: {clean_sync_url}")
-        print(f"Async database URL: {async_database_url}")
+        print(f"Async database URL: {pg8000_async_url}")
         
         print("Creating sync engine with pg8000...")
         # Create sync engine using pg8000 (pure Python)
@@ -63,15 +62,16 @@ if settings.database_url.startswith("postgresql"):
             print("Proceeding with async engine only...")
             sync_engine = None
         
-        print("Creating async engine...")
-        # Create async engine
+        print("Creating async engine with pg8000...")
+        # Create async engine using pg8000
+        pg8000_async_url = clean_sync_url.replace("postgresql://", "postgresql+pg8000://")
         engine = create_async_engine(
-            async_database_url, 
+            pg8000_async_url, 
             echo=settings.debug,
             pool_pre_ping=True,
             pool_recycle=300
         )
-        print("Async engine created successfully")
+        print("Async engine created successfully with pg8000")
         
         AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
         if sync_engine:
