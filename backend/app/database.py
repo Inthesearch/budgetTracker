@@ -48,8 +48,23 @@ if settings.database_url.startswith("postgresql"):
         print(f"Clean sync URL: {clean_sync_url}")
         print(f"Async database URL: {async_database_url}")
         
-        print("Creating async engine only (skipping sync engine)...")
-        # Create async engine only - avoid psycopg2 issues
+        print("Creating sync engine with pg8000...")
+        # Create sync engine using pg8000 (pure Python)
+        try:
+            pg8000_url = clean_sync_url.replace("postgresql://", "postgresql+pg8000://")
+            sync_engine = create_engine(
+                pg8000_url, 
+                echo=settings.debug,
+                connect_args={}
+            )
+            print("Sync engine created successfully with pg8000")
+        except Exception as sync_error:
+            print(f"Sync engine creation failed: {sync_error}")
+            print("Proceeding with async engine only...")
+            sync_engine = None
+        
+        print("Creating async engine...")
+        # Create async engine
         engine = create_async_engine(
             async_database_url, 
             echo=settings.debug,
@@ -59,6 +74,8 @@ if settings.database_url.startswith("postgresql"):
         print("Async engine created successfully")
         
         AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        if sync_engine:
+            SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
         
         print("PostgreSQL connection configured successfully")
         print(f"Database URL: {settings.database_url}")
@@ -93,5 +110,13 @@ async def get_db():
         finally:
             await session.close()
 
-# Note: Sync database operations removed to avoid psycopg2 compatibility issues
-# All operations should use async sessions 
+# For sync operations (when sync engine is available)
+def get_sync_db():
+    if 'SessionLocal' in globals():
+        db = SessionLocal()
+        try:
+            yield db
+        finally:
+            db.close()
+    else:
+        raise Exception("Sync database not available") 
