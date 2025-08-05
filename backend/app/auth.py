@@ -83,10 +83,16 @@ async def get_current_user(
 
 async def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
     """Authenticate a user with email and password."""
+    print(f"Authenticating user with email: {email}")
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalars().first()
+    print(f"User found: {user is not None}")
     if not user:
+        print("No user found with this email")
         return None
+    print(f"Verifying password for user: {user.email}")
     if not verify_password(password, user.hashed_password):
+        print("Password verification failed")
         return None
+    print("Password verification successful")
     return user 
