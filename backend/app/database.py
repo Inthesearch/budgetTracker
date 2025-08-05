@@ -73,10 +73,10 @@ if settings.database_url.startswith("postgresql"):
         print(f"PostgreSQL connection failed: {e}")
         print("Falling back to SQLite for development")
         print(f"Original database URL: {settings.database_url}")
-        print(f"Fallback URL: {fallback_url}")
         
         # Fallback to SQLite - use async engine
         fallback_url = "sqlite+aiosqlite:///./budget_tracker.db"
+        print(f"Fallback URL: {fallback_url}")
         engine = create_async_engine(fallback_url, echo=settings.debug)
         AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
         settings.database_url = fallback_url
