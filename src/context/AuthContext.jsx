@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/api.js';
 
 const AuthContext = createContext();
 
@@ -15,7 +16,7 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   // API Base URL - Production
-  const API_BASE_URL = 'https://budgettracker-yiw5.onrender.com';
+
 
   useEffect(() => {
     // Check if user is logged in from localStorage
@@ -29,7 +30,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/login`, {
+      const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.LOGIN}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -61,7 +62,7 @@ export const AuthProvider = ({ children }) => {
 
   const forgotPassword = async (email) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/forgotPass`, {
+      const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.FORGOT_PASSWORD}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -84,7 +85,7 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (userData) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/register`, {
+      const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.REGISTER}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

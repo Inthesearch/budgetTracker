@@ -4,7 +4,10 @@ import { useTransactions } from '../context/TransactionContext.jsx';
 import './BudgetGraph.css';
 
 const BudgetGraph = () => {
-  const { transactions } = useTransactions();
+  console.log('BudgetGraph component loaded!');
+  const { transactions, categories } = useTransactions();
+  console.log('Transactions:', transactions);
+  console.log('Categories:', categories);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [dateRange, setDateRange] = useState({
     start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
@@ -15,7 +18,25 @@ const BudgetGraph = () => {
   // Helper function to get category name
   const getCategoryName = (category) => {
     if (!category) return null;
-    return typeof category === 'string' ? category : category.name;
+    
+    // If category is a number (ID), we need to look it up from categories
+    if (typeof category === 'number') {
+      const categoryObj = categories.find(cat => cat.id === category);
+      return categoryObj ? categoryObj.name : `Category ${category}`;
+    }
+    
+    // If category is a string, return it directly
+    if (typeof category === 'string') {
+      return category;
+    }
+    
+    // If category is an object with name property
+    if (category && typeof category === 'object' && category.name) {
+      return category.name;
+    }
+    
+    // Fallback
+    return `Category ${category}`;
   };
 
   // Get unique categories for filter
@@ -52,8 +73,16 @@ const BudgetGraph = () => {
   const categoryData = useMemo(() => {
     const categoryTotals = {};
     
+    // Debug: Log the first transaction to see its structure
+    if (filteredTransactions.length > 0) {
+      console.log('First transaction structure:', filteredTransactions[0]);
+      console.log('Available categories:', categories);
+    }
+    
     filteredTransactions.forEach(transaction => {
       const categoryName = getCategoryName(transaction.category);
+      console.log(`Transaction category:`, transaction.category, `-> Category name:`, categoryName);
+      
       if (categoryName) {
         if (!categoryTotals[categoryName]) {
           categoryTotals[categoryName] = 0;
@@ -67,6 +96,8 @@ const BudgetGraph = () => {
       }
     });
 
+    console.log('Category totals:', categoryTotals);
+
     // Convert to array and sort by amount (descending)
     return Object.entries(categoryTotals)
       .map(([category, amount]) => ({
@@ -75,7 +106,7 @@ const BudgetGraph = () => {
         isExpense: amount > 0
       }))
       .sort((a, b) => b.amount - a.amount);
-  }, [filteredTransactions]);
+  }, [filteredTransactions, categories]);
 
   // Calculate sub-category data for selected category
   const subCategoryData = useMemo(() => {
@@ -140,6 +171,8 @@ const BudgetGraph = () => {
   const displayTitle = selectedCategory 
     ? `Sub-Categories for ${selectedCategory}`
     : 'Category Spending';
+  
+  console.log('Display data:', displayData);
 
   return (
     <div className="budget-graph-container">
@@ -192,18 +225,18 @@ const BudgetGraph = () => {
           </div>
         )}
 
-        <button onClick={clearFilters} className="clear-filters-btn">
-          Clear Filters
-        </button>
-      </div>
+               <button onClick={clearFilters} className="clear-filters-btn">
+         Clear Filters
+       </button>
+     </div>
 
-      {/* Chart */}
+     {/* Chart */}
       <div className="chart-container">
         {displayData.length > 0 ? (
           <ResponsiveContainer width="100%" height={400}>
             <BarChart
               data={displayData}
-              layout="horizontal"
+              layout="vertical"
               margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
             >
               <CartesianGrid strokeDasharray="3 3" />

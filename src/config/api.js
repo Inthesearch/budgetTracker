@@ -1,24 +1,32 @@
 // API Configuration
-const API_CONFIG = {
-  // Development
-  development: {
-    baseUrl: 'http://localhost:8000'
-  },
-  // Production
-  production: {
-    baseUrl: 'https://budgettracker-yiw5.onrender.com'
-  }
-};
+export const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000';
 
-// Get current environment
-const isDevelopment = process.env.NODE_ENV === 'development';
-const currentConfig = isDevelopment ? API_CONFIG.development : API_CONFIG.production;
+// Environment detection
+export const isDevelopment = process.env.NODE_ENV === 'development';
+export const isProduction = process.env.NODE_ENV === 'production';
 
-export const API_BASE_URL = currentConfig.baseUrl;
-
-// Helper function to get full API URL
-export const getApiUrl = (endpoint) => {
-  return `${API_BASE_URL}/api/v1${endpoint}`;
-};
-
-export default API_CONFIG; 
+// API endpoints
+export const API_ENDPOINTS = {
+  // Auth endpoints
+  LOGIN: '/api/v1/login',
+  REGISTER: '/api/v1/register',
+  FORGOT_PASSWORD: '/api/v1/forgotPass',
+  
+  // Transaction endpoints
+  GET_TRANSACTIONS: '/api/v1/transaction/getTransactionRecord',
+  ADD_TRANSACTION: '/api/v1/transaction/addTransaction',
+  UPDATE_TRANSACTION: '/api/v1/transaction/editTransaction',
+  DELETE_TRANSACTION: '/api/v1/transaction/deleteTransaction',
+  
+  // Category endpoints
+  GET_CATEGORIES: '/api/v1/category/list',
+  ADD_CATEGORY: '/api/v1/category/addCategory',
+  
+  // Subcategory endpoints
+  GET_SUBCATEGORIES: '/api/v1/subcategory/list',
+  ADD_SUBCATEGORY: '/api/v1/subcategory/addSubCategory',
+  
+  // Account endpoints
+  GET_ACCOUNTS: '/api/v1/account/list',
+  ADD_ACCOUNT: '/api/v1/account/addAccount',
+}; 

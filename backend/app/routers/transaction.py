@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from typing import List, Optional
 from datetime import datetime, date
 
@@ -241,8 +241,6 @@ async def get_transaction_record(
 ):
     """Get transaction records with filtering and pagination."""
     try:
-        from sqlalchemy.orm import selectinload
-        
         # Build base query with related data
         stmt = select(Transaction).options(
             selectinload(Transaction.category),
@@ -299,8 +297,6 @@ async def get_transaction_detail(
     """Get detailed information about a specific transaction."""
     try:
         # Use select with options to load related data
-        from sqlalchemy.orm import selectinload
-        
         stmt = select(Transaction).options(
             selectinload(Transaction.category),
             selectinload(Transaction.sub_category),
