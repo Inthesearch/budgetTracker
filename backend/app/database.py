@@ -71,32 +71,26 @@ if settings.database_url.startswith("postgresql"):
         print(f"PostgreSQL connection failed: {e}")
         print("Falling back to SQLite for development")
         
-        # Fallback to SQLite
-        fallback_url = "sqlite:///./budget_tracker.db"
-        engine = create_engine(fallback_url, echo=settings.debug)
-        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        # Fallback to SQLite - use async engine
+        fallback_url = "sqlite+aiosqlite:///./budget_tracker.db"
+        engine = create_async_engine(fallback_url, echo=settings.debug)
+        AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
         settings.database_url = fallback_url
 else:
-    # For SQLite (development)
-    engine = create_engine(settings.database_url, echo=settings.debug)
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    # For SQLite (development) - use async engine
+    async_url = settings.database_url.replace("sqlite://", "sqlite+aiosqlite://")
+    engine = create_async_engine(async_url, echo=settings.debug)
+    AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 Base = declarative_base()
 
 # Dependency to get database session
 async def get_db():
-    if settings.database_url.startswith("postgresql"):
-        async with AsyncSessionLocal() as session:
-            try:
-                yield session
-            finally:
-                await session.close()
-    else:
-        db = SessionLocal()
+    async with AsyncSessionLocal() as session:
         try:
-            yield db
+            yield session
         finally:
-            db.close()
+            await session.close()
 
 # For sync operations (when needed)
 def get_sync_db():
