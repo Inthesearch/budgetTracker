@@ -84,6 +84,18 @@ async def get_current_user(
 async def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
     """Authenticate a user with email and password."""
     print(f"Authenticating user with email: {email}")
+    
+    # Debug: Check what database we're using
+    from .config import settings
+    print(f"Current database URL: {settings.database_url}")
+    
+    # Debug: Check if there are any users in the database
+    all_users_result = await db.execute(select(User))
+    all_users = all_users_result.scalars().all()
+    print(f"Total users in database: {len(all_users)}")
+    for u in all_users:
+        print(f"  - User ID: {u.id}, Email: {u.email}, Active: {u.is_active}")
+    
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalars().first()
     print(f"User found: {user is not None}")
