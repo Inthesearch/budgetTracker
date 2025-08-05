@@ -14,7 +14,6 @@ print(f"Running in production: {is_production}")
 if not is_production:
     print(f"Loading .env file for development...")
     load_dotenv()
-    
     # Also try loading from specific path
     import pathlib
     backend_dir = pathlib.Path(__file__).parent.parent
