@@ -45,12 +45,15 @@ if settings.database_url.startswith("postgresql"):
         
         print(f"Original database URL: {settings.database_url}")
         print(f"Clean sync URL: {clean_sync_url}")
+        
+        # Create pg8000 URLs
+        pg8000_url = clean_sync_url.replace("postgresql://", "postgresql+pg8000://")
+        pg8000_async_url = clean_sync_url.replace("postgresql://", "postgresql+pg8000://")
         print(f"Async database URL: {pg8000_async_url}")
         
         print("Creating sync engine with pg8000...")
         # Create sync engine using pg8000 (pure Python)
         try:
-            pg8000_url = clean_sync_url.replace("postgresql://", "postgresql+pg8000://")
             sync_engine = create_engine(
                 pg8000_url, 
                 echo=settings.debug,
@@ -64,7 +67,6 @@ if settings.database_url.startswith("postgresql"):
         
         print("Creating async engine with pg8000...")
         # Create async engine using pg8000
-        pg8000_async_url = clean_sync_url.replace("postgresql://", "postgresql+pg8000://")
         engine = create_async_engine(
             pg8000_async_url, 
             echo=settings.debug,
