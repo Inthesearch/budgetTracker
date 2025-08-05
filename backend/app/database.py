@@ -46,38 +46,21 @@ if settings.database_url.startswith("postgresql"):
         print(f"Original database URL: {settings.database_url}")
         print(f"Clean sync URL: {clean_sync_url}")
         
-        # Create pg8000 URLs
-        pg8000_url = clean_sync_url.replace("postgresql://", "postgresql+pg8000://")
-        pg8000_async_url = clean_sync_url.replace("postgresql://", "postgresql+pg8000://")
-        print(f"Async database URL: {pg8000_async_url}")
+        # Create asyncpg URLs
+        asyncpg_url = clean_sync_url.replace("postgresql://", "postgresql+asyncpg://")
+        print(f"Async database URL: {asyncpg_url}")
         
-        print("Creating sync engine with pg8000...")
-        # Create sync engine using pg8000 (pure Python)
-        try:
-            sync_engine = create_engine(
-                pg8000_url, 
-                echo=settings.debug,
-                connect_args={}
-            )
-            print("Sync engine created successfully with pg8000")
-        except Exception as sync_error:
-            print(f"Sync engine creation failed: {sync_error}")
-            print("Proceeding with async engine only...")
-            sync_engine = None
-        
-        print("Creating async engine with pg8000...")
-        # Create async engine using pg8000
+        print("Creating async engine with asyncpg...")
+        # Create async engine using asyncpg
         engine = create_async_engine(
-            pg8000_async_url, 
+            asyncpg_url, 
             echo=settings.debug,
             pool_pre_ping=True,
             pool_recycle=300
         )
-        print("Async engine created successfully with pg8000")
+        print("Async engine created successfully with asyncpg")
         
         AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-        if sync_engine:
-            SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
         
         print("PostgreSQL connection configured successfully")
         print(f"Database URL: {settings.database_url}")
@@ -112,13 +95,5 @@ async def get_db():
         finally:
             await session.close()
 
-# For sync operations (when sync engine is available)
-def get_sync_db():
-    if 'SessionLocal' in globals():
-        db = SessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
-    else:
-        raise Exception("Sync database not available") 
+# Note: Sync database operations removed - using async-only approach
+# All database operations should use async sessions 
