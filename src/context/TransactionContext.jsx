@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useAuth } from './AuthContext.jsx';
 import { API_BASE_URL, API_ENDPOINTS } from '../config/api.js';
 
@@ -50,15 +50,25 @@ export const TransactionProvider = ({ children }) => {
     
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.GET_TRANSACTIONS}`, {
+      const fullUrl = `${API_BASE_URL}${API_ENDPOINTS.GET_TRANSACTIONS}`;
+      console.log('Calling transactions endpoint:', fullUrl);
+      console.log('API_BASE_URL:', API_BASE_URL);
+      console.log('GET_TRANSACTIONS endpoint:', API_ENDPOINTS.GET_TRANSACTIONS);
+      const response = await fetch(fullUrl, {
         method: 'GET',
         headers: getAuthHeaders(),
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        setTransactions(data);
-      } else if (response.status === 401) {
+             if (response.ok) {
+         const data = await response.json();
+         console.log('Transactions response data:', data);
+         console.log('Response data type:', typeof data);
+         console.log('Response data length:', Array.isArray(data) ? data.length : 'Not an array');
+         if (Array.isArray(data) && data.length > 0) {
+           console.log('First item structure:', data[0]);
+         }
+         setTransactions(data);
+       } else if (response.status === 401) {
         // Token expired or invalid
         console.error('Authentication failed, redirecting to login');
         localStorage.removeItem('token');

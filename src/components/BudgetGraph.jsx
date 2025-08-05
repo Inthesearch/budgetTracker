@@ -50,23 +50,36 @@ const BudgetGraph = () => {
 
   // Filter transactions based on date range and selected categories
   const filteredTransactions = useMemo(() => {
-    return transactions.filter(transaction => {
+    console.log('Filtering transactions:', transactions.length);
+    console.log('Date range:', dateRange);
+    console.log('Selected categories:', selectedCategories);
+    
+    const filtered = transactions.filter(transaction => {
       const transactionDate = new Date(transaction.date);
       const startDate = new Date(dateRange.start);
       const endDate = new Date(dateRange.end);
       
+      console.log('Transaction date:', transaction.date, 'Parsed:', transactionDate);
+      console.log('Start date:', startDate, 'End date:', endDate);
+      
       // Date filter
       if (transactionDate < startDate || transactionDate > endDate) {
+        console.log('Transaction filtered out by date');
         return false;
       }
       
       // Category filter
       if (selectedCategories.length > 0 && !selectedCategories.includes(getCategoryName(transaction.category))) {
+        console.log('Transaction filtered out by category');
         return false;
       }
       
+      console.log('Transaction passed filters');
       return true;
     });
+    
+    console.log('Filtered transactions count:', filtered.length);
+    return filtered;
   }, [transactions, dateRange, selectedCategories]);
 
   // Calculate category totals
@@ -173,6 +186,9 @@ const BudgetGraph = () => {
     : 'Category Spending';
   
   console.log('Display data:', displayData);
+  console.log('Category data:', categoryData);
+  console.log('Sub category data:', subCategoryData);
+  console.log('Selected category:', selectedCategory);
 
   return (
     <div className="budget-graph-container">
