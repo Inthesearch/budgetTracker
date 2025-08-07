@@ -4,6 +4,12 @@
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
+@media (max-width: 768px) {
+  .login-container {
+    flex-direction: column;
+  }
+}
+
 .login-left {
   flex: 1;
   display: flex;
@@ -11,6 +17,13 @@
   justify-content: center;
   padding: 40px;
   color: white;
+}
+
+@media (max-width: 768px) {
+  .login-left {
+    padding: 20px;
+    min-height: 40vh;
+  }
 }
 
 .login-content {
@@ -56,9 +69,21 @@
   padding: 40px;
 }
 
+@media (max-width: 768px) {
+  .login-right {
+    padding: 20px;
+  }
+}
+
 .login-form-container {
   width: 100%;
   max-width: 400px;
+}
+
+@media (max-width: 768px) {
+  .login-form-container {
+    max-width: 100%;
+  }
 }
 
 .login-form-container h2 {

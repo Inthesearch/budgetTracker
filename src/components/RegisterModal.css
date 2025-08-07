@@ -79,6 +79,7 @@
   font-size: 16px;
   transition: border-color 0.2s, box-shadow 0.2s;
   box-sizing: border-box;
+  min-height: 44px; /* Touch-friendly minimum height */
 }
 
 .form-group input:focus {
@@ -120,6 +121,7 @@
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
+  min-height: 44px; /* Touch-friendly minimum height */
 }
 
 .cancel-button:hover {
@@ -138,6 +140,7 @@
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
+  min-height: 44px; /* Touch-friendly minimum height */
 }
 
 .register-button:hover:not(:disabled) {

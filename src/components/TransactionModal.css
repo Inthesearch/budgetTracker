@@ -9,6 +9,14 @@
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
 }
 
+@media (max-width: 768px) {
+  .transaction-modal {
+    width: 95%;
+    padding: 20px;
+    max-height: 95vh;
+  }
+}
+
 .transaction-modal h3 {
   margin: 0 0 25px 0;
   color: #333;
@@ -26,6 +34,13 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 20px;
+}
+
+@media (max-width: 768px) {
+  .form-row {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
 }
 
 .form-group {
@@ -49,6 +64,7 @@
   font-size: 1rem;
   transition: border-color 0.3s ease;
   font-family: inherit;
+  min-height: 44px; /* Touch-friendly minimum height */
 }
 
 .form-group input:focus,
@@ -155,6 +171,13 @@
   margin-top: 20px;
   padding-top: 20px;
   border-top: 1px solid #eee;
+}
+
+@media (max-width: 768px) {
+  .modal-actions {
+    flex-direction: column;
+    gap: 10px;
+  }
 }
 
 .cancel-button {
