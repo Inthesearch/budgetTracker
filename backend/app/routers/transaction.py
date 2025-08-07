@@ -235,7 +235,7 @@ async def get_transaction_record(
     min_amount: Optional[float] = Query(None, description="Minimum amount"),
     max_amount: Optional[float] = Query(None, description="Maximum amount"),
     page: int = Query(1, ge=1, description="Page number"),
-    size: int = Query(10, ge=1, le=100, description="Page size"),
+    size: int = Query(None, ge=1, description="Page size"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -273,8 +273,9 @@ async def get_transaction_record(
         stmt = stmt.order_by(Transaction.date.desc())
         
         # Apply pagination
-        offset = (page - 1) * size
-        stmt = stmt.offset(offset).limit(size)
+        if size:
+            offset = (page - 1) * size
+            stmt = stmt.offset(offset).limit(size)
         
         # Execute query
         result = await db.execute(stmt)

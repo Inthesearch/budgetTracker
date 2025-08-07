@@ -152,7 +152,11 @@ const Home = () => {
             <div className="transaction-info">
               <div className="info-row">
                 <span className="label">Date:</span>
-                <span>{new Date(selectedTransaction.date).toLocaleDateString()}</span>
+                <span>{new Date(selectedTransaction.date).toLocaleDateString('en-US', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
+                })}</span>
               </div>
               <div className="info-row">
                 <span className="label">Type:</span>

@@ -18,7 +18,7 @@ const TransactionModal = ({ transaction, onClose, onSuccess }) => {
     amount: '',
     category_id: '',
     sub_category_id: '',
-    date: new Date().toISOString().split('T')[0],
+    date: new Date().toLocaleDateString('en-CA'),
     account_id: '',
     type: 'expense',
     notes: ''
@@ -60,11 +60,14 @@ const TransactionModal = ({ transaction, onClose, onSuccess }) => {
 
   useEffect(() => {
     if (transaction) {
+      // Convert UTC date to local date for the date input
+      const localDate = new Date(transaction.date).toISOString().split('T')[0];
+      
       setFormData({
         amount: transaction.amount.toString(),
         category_id: getCategoryId(transaction.category) || '',
         sub_category_id: getCategoryId(transaction.sub_category) || '',
-        date: transaction.date,
+        date: localDate,
         account_id: getAccountId(transaction.account) || '',
         type: transaction.type || 'expense',
         notes: transaction.notes || ''
@@ -137,9 +140,8 @@ const TransactionModal = ({ transaction, onClose, onSuccess }) => {
 
     try {
       // Convert date to timezone-aware datetime format
-      // Create a date object in local timezone, then convert to ISO string
-      const localDate = new Date(formData.date + 'T00:00:00');
-      const dateTime = localDate.toISOString();
+      // Use the selected date as midnight UTC to avoid timezone conversion issues
+      const dateTime = formData.date + 'T00:00:00Z';
       
       const transactionData = {
         amount: parseFloat(formData.amount),

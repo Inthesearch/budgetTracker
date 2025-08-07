@@ -18,7 +18,9 @@ const TransactionList = ({ transactions, onEdit, onDelete, onView, loading }) =>
   };
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+    // Convert UTC date to local date for display
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',

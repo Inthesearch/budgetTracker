@@ -1,19 +1,17 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect  } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useTransactions } from '../context/TransactionContext.jsx';
 import './BudgetGraph.css';
 
 const BudgetGraph = () => {
-  console.log('BudgetGraph component loaded!');
   const { transactions, categories } = useTransactions();
-  console.log('Transactions:', transactions);
-  console.log('Categories:', categories);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [dateRange, setDateRange] = useState({
-    start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
-    end: new Date().toISOString().split('T')[0]
+    start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toLocaleDateString('en-CA'),
+    end: new Date().toLocaleDateString('en-CA')
   });
   const [selectedCategories, setSelectedCategories] = useState([]);
+
 
   // Helper function to get category name
   const getCategoryName = (category) => {
@@ -50,51 +48,35 @@ const BudgetGraph = () => {
 
   // Filter transactions based on date range and selected categories
   const filteredTransactions = useMemo(() => {
-    console.log('Filtering transactions:', transactions.length);
-    console.log('Date range:', dateRange);
-    console.log('Selected categories:', selectedCategories);
-    
     const filtered = transactions.filter(transaction => {
       const transactionDate = new Date(transaction.date);
       const startDate = new Date(dateRange.start);
-      const endDate = new Date(dateRange.end);
-      
-      console.log('Transaction date:', transaction.date, 'Parsed:', transactionDate);
-      console.log('Start date:', startDate, 'End date:', endDate);
+      const endDate = new Date(dateRange.end);  
       
       // Date filter
       if (transactionDate < startDate || transactionDate > endDate) {
-        console.log('Transaction filtered out by date');
         return false;
       }
       
       // Category filter
       if (selectedCategories.length > 0 && !selectedCategories.includes(getCategoryName(transaction.category))) {
-        console.log('Transaction filtered out by category');
         return false;
       }
       
-      console.log('Transaction passed filters');
       return true;
     });
     
-    console.log('Filtered transactions count:', filtered.length);
     return filtered;
-  }, [transactions, dateRange, selectedCategories]);
+  }, [transactions, dateRange, selectedCategories, categories]);
+
+
 
   // Calculate category totals
   const categoryData = useMemo(() => {
     const categoryTotals = {};
     
-    // Debug: Log the first transaction to see its structure
-    if (filteredTransactions.length > 0) {
-      console.log('First transaction structure:', filteredTransactions[0]);
-      console.log('Available categories:', categories);
-    }
-    
     filteredTransactions.forEach(transaction => {
       const categoryName = getCategoryName(transaction.category);
-      console.log(`Transaction category:`, transaction.category, `-> Category name:`, categoryName);
       
       if (categoryName) {
         if (!categoryTotals[categoryName]) {
@@ -108,8 +90,6 @@ const BudgetGraph = () => {
         }
       }
     });
-
-    console.log('Category totals:', categoryTotals);
 
     // Convert to array and sort by amount (descending)
     return Object.entries(categoryTotals)
@@ -126,6 +106,8 @@ const BudgetGraph = () => {
     if (!selectedCategory) return [];
 
     const subCategoryTotals = {};
+
+
     
     filteredTransactions
       .filter(t => getCategoryName(t.category) === selectedCategory)
@@ -151,7 +133,10 @@ const BudgetGraph = () => {
         isExpense: amount > 0
       }))
       .sort((a, b) => b.amount - a.amount);
-  }, [filteredTransactions, selectedCategory]);
+  }, [filteredTransactions, selectedCategory, transactions]);
+
+
+  
 
   const handleCategoryClick = (data) => {
     if (selectedCategory === data.category) {
@@ -173,8 +158,8 @@ const BudgetGraph = () => {
 
   const clearFilters = () => {
     setDateRange({
-      start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
-      end: new Date().toISOString().split('T')[0]
+      start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toLocaleDateString('en-CA'),
+      end: new Date().toLocaleDateString('en-CA')
     });
     setSelectedCategories([]);
     setSelectedCategory(null);
@@ -185,10 +170,7 @@ const BudgetGraph = () => {
     ? `Sub-Categories for ${selectedCategory}`
     : 'Category Spending';
   
-  console.log('Display data:', displayData);
-  console.log('Category data:', categoryData);
-  console.log('Sub category data:', subCategoryData);
-  console.log('Selected category:', selectedCategory);
+
 
   return (
     <div className="budget-graph-container">
