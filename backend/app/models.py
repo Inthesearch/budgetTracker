@@ -46,6 +46,12 @@ class Category(Base):
     user = relationship("User", back_populates="categories")
     sub_categories = relationship("SubCategory", back_populates="category", cascade="all, delete-orphan")
     transactions = relationship("Transaction", back_populates="category")
+    
+    def __init__(self, **kwargs):
+        # Convert name to lowercase before saving
+        if 'name' in kwargs:
+            kwargs['name'] = kwargs['name'].lower()
+        super().__init__(**kwargs)
 
 class SubCategory(Base):
     __tablename__ = "sub_categories"
@@ -63,6 +69,12 @@ class SubCategory(Base):
     user = relationship("User", back_populates="sub_categories")
     category = relationship("Category", back_populates="sub_categories")
     transactions = relationship("Transaction", back_populates="sub_category")
+    
+    def __init__(self, **kwargs):
+        # Convert name to lowercase before saving
+        if 'name' in kwargs:
+            kwargs['name'] = kwargs['name'].lower()
+        super().__init__(**kwargs)
 
 class Account(Base):
     __tablename__ = "accounts"
@@ -80,6 +92,12 @@ class Account(Base):
     # Relationships
     user = relationship("User", back_populates="accounts")
     transactions = relationship("Transaction", back_populates="account")
+
+    def __init__(self, **kwargs):
+        # Convert name to lowercase before saving
+        if 'name' in kwargs:
+            kwargs['name'] = kwargs['name'].lower()
+        super().__init__(**kwargs)
 
 class Transaction(Base):
     __tablename__ = "transactions"

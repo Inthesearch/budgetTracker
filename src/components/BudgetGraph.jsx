@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect  } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useTransactions } from '../context/TransactionContext.jsx';
+import { formatCategoryName, formatSubcategoryName } from '../utils/formatters.js';
 import './BudgetGraph.css';
 
 const BudgetGraph = () => {
@@ -13,28 +14,58 @@ const BudgetGraph = () => {
   const [selectedCategories, setSelectedCategories] = useState([]);
 
 
-  // Helper function to get category name
+  // Helper function to get category name with proper case
   const getCategoryName = (category) => {
     if (!category) return null;
+    
+    let name;
     
     // If category is a number (ID), we need to look it up from categories
     if (typeof category === 'number') {
       const categoryObj = categories.find(cat => cat.id === category);
-      return categoryObj ? categoryObj.name : `Category ${category}`;
+      name = categoryObj ? categoryObj.name : `Category ${category}`;
     }
-    
-    // If category is a string, return it directly
-    if (typeof category === 'string') {
-      return category;
+    // If category is a string, use it directly
+    else if (typeof category === 'string') {
+      name = category;
     }
-    
     // If category is an object with name property
-    if (category && typeof category === 'object' && category.name) {
-      return category.name;
+    else if (category && typeof category === 'object' && category.name) {
+      name = category.name;
+    }
+    // Fallback
+    else {
+      name = `Category ${category}`;
     }
     
+    return formatCategoryName(name);
+  };
+
+  // Helper function to get subcategory name with proper case
+  const getSubcategoryName = (subcategory) => {
+    if (!subcategory) return null;
+    
+    let name;
+    
+    // If subcategory is a number (ID), we need to look it up from subcategories
+    if (typeof subcategory === 'number') {
+      // For now, we'll use a fallback since we don't have subcategories in context
+      name = `Subcategory ${subcategory}`;
+    }
+    // If subcategory is a string, use it directly
+    else if (typeof subcategory === 'string') {
+      name = subcategory;
+    }
+    // If subcategory is an object with name property
+    else if (subcategory && typeof subcategory === 'object' && subcategory.name) {
+      name = subcategory.name;
+    }
     // Fallback
-    return `Category ${category}`;
+    else {
+      name = `Subcategory ${subcategory}`;
+    }
+    
+    return formatSubcategoryName(name);
   };
 
   // Get unique categories for filter
@@ -112,7 +143,7 @@ const BudgetGraph = () => {
     filteredTransactions
       .filter(t => getCategoryName(t.category) === selectedCategory)
       .forEach(transaction => {
-        const subCategoryName = getCategoryName(transaction.sub_category);
+        const subCategoryName = getSubcategoryName(transaction.sub_category);
         if (subCategoryName) {
           if (!subCategoryTotals[subCategoryName]) {
             subCategoryTotals[subCategoryName] = 0;

@@ -31,9 +31,9 @@ async def add_sub_category(
             detail="Category not found"
         )
     
-    # Check if sub-category already exists for this user and category
+    # Check if sub-category already exists for this user and category (case-insensitive)
     result = await db.execute(select(SubCategory).where(
-        SubCategory.name == sub_category_data.name,
+        SubCategory.name == sub_category_data.name.lower(),
         SubCategory.user_id == current_user.id,
         SubCategory.category_id == sub_category_data.category_id,
         SubCategory.is_active == True
