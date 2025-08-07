@@ -68,6 +68,10 @@ class CategoryBase(BaseModel):
     description: Optional[str] = None
     color: Optional[str] = "#3B82F6"
     icon: Optional[str] = "📁"
+    
+    @validator('name')
+    def convert_name_to_lowercase(cls, v):
+        return v.lower()
 
 class CategoryCreate(CategoryBase):
     pass
@@ -82,6 +86,11 @@ class CategoryResponse(CategoryBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
     
+    @validator('name', pre=True)
+    def format_name_for_display(cls, v):
+        from .utils import format_category_name
+        return format_category_name(v)
+    
     class Config:
         from_attributes = True
 
@@ -89,6 +98,10 @@ class CategoryResponse(CategoryBase):
 class SubCategoryBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = None
+    
+    @validator('name')
+    def convert_name_to_lowercase(cls, v):
+        return v.lower()
 
 class SubCategoryCreate(SubCategoryBase):
     category_id: int
@@ -105,6 +118,11 @@ class SubCategoryResponse(SubCategoryBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
     
+    @validator('name', pre=True)
+    def format_name_for_display(cls, v):
+        from .utils import format_subcategory_name
+        return format_subcategory_name(v)
+    
     class Config:
         from_attributes = True
 
@@ -114,6 +132,10 @@ class AccountBase(BaseModel):
     type: str = Field(default="bank", pattern="^(bank|credit|cash|investment)$")
     balance: float = Field(default=0.0, ge=0)
     currency: str = Field(default="USD", max_length=3)
+
+    @validator('name')
+    def convert_name_to_lowercase(cls, v):
+        return v.lower()
 
 class AccountCreate(AccountBase):
     pass
@@ -130,6 +152,11 @@ class AccountResponse(AccountBase):
     is_active: bool
     created_at: datetime
     updated_at: Optional[datetime] = None
+    
+    @validator('name', pre=True)
+    def format_name_for_display(cls, v):
+        from .utils import format_account_name
+        return format_account_name(v)
     
     class Config:
         from_attributes = True

@@ -19,9 +19,9 @@ async def add_category(
 ):
     """Add a new category or link to existing one."""
     try:
-        # Check if category already exists for this user
+        # Check if category already exists for this user (case-insensitive)
         stmt = select(Category).where(
-            Category.name == category_data.name,
+            Category.name == category_data.name.lower(),
             Category.user_id == current_user.id,
             Category.is_active == True
         )
@@ -91,10 +91,10 @@ async def edit_category(
                 detail="Category not found"
             )
         
-        # Check if new name conflicts with existing category
-        if category_data.name and category_data.name != category.name:
+        # Check if new name conflicts with existing category (case-insensitive)
+        if category_data.name and category_data.name.lower() != category.name:
             stmt = select(Category).where(
-                Category.name == category_data.name,
+                Category.name == category_data.name.lower(),
                 Category.user_id == current_user.id,
                 Category.is_active == True,
                 Category.id != category_id
@@ -110,7 +110,7 @@ async def edit_category(
         
         # Update category
         if category_data.name is not None:
-            category.name = category_data.name
+            category.name = category_data.name.lower()
         if category_data.description is not None:
             category.description = category_data.description
         if category_data.color is not None:

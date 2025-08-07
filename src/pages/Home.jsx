@@ -5,6 +5,7 @@ import { toast } from 'react-toastify';
 import TransactionModal from '../components/TransactionModal.jsx';
 import TransactionList from '../components/TransactionList.jsx';
 import BudgetGraph from '../components/BudgetGraph.jsx';
+import { formatCategoryName, formatSubcategoryName, formatAccountName } from '../utils/formatters.js';
 
 import './Home.css';
 
@@ -17,16 +18,25 @@ const Home = () => {
   const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
-  // Helper function to get category name
+  // Helper function to get category name with proper case
   const getCategoryName = (category) => {
     if (!category) return null;
-    return typeof category === 'string' ? category : category.name;
+    const name = typeof category === 'string' ? category : category.name;
+    return formatCategoryName(name);
   };
 
-  // Helper function to get account name
+  // Helper function to get subcategory name with proper case
+  const getSubcategoryName = (subcategory) => {
+    if (!subcategory) return null;
+    const name = typeof subcategory === 'string' ? subcategory : subcategory.name;
+    return formatSubcategoryName(name);
+  };
+
+  // Helper function to get account name with proper case
   const getAccountName = (account) => {
     if (!account) return null;
-    return typeof account === 'string' ? account : account.name;
+    const name = typeof account === 'string' ? account : account.name;
+    return formatAccountName(name);
   };
 
   const handleLogout = () => {
@@ -197,7 +207,7 @@ const Home = () => {
               {selectedTransaction.sub_category && (
                 <div className="info-row">
                   <span className="label">Sub-Category:</span>
-                  <span>{getCategoryName(selectedTransaction.sub_category) || '-'}</span>
+                  <span>{getSubcategoryName(selectedTransaction.sub_category) || '-'}</span>
                 </div>
               )}
               <div className="info-row">

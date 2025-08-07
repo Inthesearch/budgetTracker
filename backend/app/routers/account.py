@@ -18,9 +18,9 @@ async def add_account(
     db: AsyncSession = Depends(get_db)
 ):
     """Add a new account."""
-    # Check if account name already exists for this user
+    # Check if account name already exists for this user (case-insensitive)
     existing_account = await db.execute(select(Account).where(
-        Account.name == account_data.name,
+        Account.name == account_data.name.lower(),
         Account.user_id == current_user.id,
         Account.is_active == True
     ))
@@ -74,10 +74,10 @@ async def edit_account(
             detail="Account not found"
         )
     
-    # Check if new name conflicts with existing account
-    if account_data.name and account_data.name != account.name:
+    # Check if new name conflicts with existing account (case-insensitive)
+    if account_data.name and account_data.name.lower() != account.name:
         existing_account = await db.execute(select(Account).where(
-            Account.name == account_data.name,
+            Account.name == account_data.name.lower(),
             Account.user_id == current_user.id,
             Account.is_active == True,
             Account.id != account_id
@@ -92,7 +92,7 @@ async def edit_account(
     
     # Update account
     if account_data.name is not None:
-        account.name = account_data.name
+        account.name = account_data.name.lower()
     if account_data.type is not None:
         account.type = account_data.type
     if account_data.balance is not None:
