@@ -10,11 +10,12 @@ import './Home.css';
 
 const Home = () => {
   const { user, logout } = useAuth();
-  const { transactions, loading } = useTransactions();
+  const { transactions, loading, deleteTransaction } = useTransactions();
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(null);
   const [selectedTransaction, setSelectedTransaction] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Helper function to get category name
   const getCategoryName = (category) => {
@@ -61,6 +62,26 @@ const Home = () => {
   const handleTransactionSuccess = (message) => {
     toast.success(message);
     handleCloseModals();
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!showDeleteModal) return;
+    
+    setDeleting(true);
+    try {
+      const result = await deleteTransaction(showDeleteModal.id);
+      if (result.success) {
+        toast.success('Transaction deleted successfully');
+        handleCloseModals();
+      } else {
+        toast.error(result.error || 'Failed to delete transaction');
+      }
+    } catch (error) {
+      console.error('Error deleting transaction:', error);
+      toast.error('An error occurred while deleting the transaction');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -128,17 +149,16 @@ const Home = () => {
               <button 
                 onClick={handleCloseModals}
                 className="cancel-button"
+                disabled={deleting}
               >
                 Cancel
               </button>
               <button 
-                onClick={() => {
-                  // Handle delete
-                  handleCloseModals();
-                }}
+                onClick={handleConfirmDelete}
                 className="delete-button"
+                disabled={deleting}
               >
-                Delete
+                {deleting ? 'Deleting...' : 'Delete'}
               </button>
             </div>
           </div>
