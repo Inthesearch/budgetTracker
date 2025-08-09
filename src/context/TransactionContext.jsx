@@ -172,8 +172,8 @@ export const TransactionProvider = ({ children }) => {
       if (response.ok) {
         const result = await response.json();
         if (result.success) {
-          // Reload transactions to get the updated list
-          await loadTransactions();
+          // Reload transactions and accounts to reflect balances
+          await Promise.all([loadTransactions(), loadAccounts()]);
           return { success: true, transaction: result.data };
         } else {
           return { success: false, error: result.message };
@@ -211,8 +211,8 @@ export const TransactionProvider = ({ children }) => {
       if (response.ok) {
         const result = await response.json();
         if (result.success) {
-          // Reload transactions to get the updated list
-          await loadTransactions();
+          // Reload transactions and accounts to reflect balances
+          await Promise.all([loadTransactions(), loadAccounts()]);
           return { success: true };
         } else {
           return { success: false, error: result.message };
@@ -249,8 +249,8 @@ export const TransactionProvider = ({ children }) => {
       if (response.ok) {
         const result = await response.json();
         if (result.success) {
-          // Reload transactions to get the updated list
-          await loadTransactions();
+          // Reload transactions and accounts to reflect balances
+          await Promise.all([loadTransactions(), loadAccounts()]);
           return { success: true };
         } else {
           return { success: false, error: result.message };
@@ -334,7 +334,7 @@ export const TransactionProvider = ({ children }) => {
         const result = await response.json();
         if (result.success) {
           await loadCategories();
-          return { success: true };
+          return { success: true, id: result.data?.category_id };
         } else {
           return { success: false, error: result.message };
         }
@@ -370,7 +370,7 @@ export const TransactionProvider = ({ children }) => {
         if (result.success) {
           // Reload categories to get updated sub-categories
           await loadCategories();
-          return { success: true };
+          return { success: true, id: result.data?.sub_category_id };
         } else {
           return { success: false, error: result.message };
         }
@@ -424,6 +424,71 @@ export const TransactionProvider = ({ children }) => {
     }
   };
 
+  const updateAccount = async (id, accountData) => {
+    if (!user || !localStorage.getItem('token')) {
+      return { success: false, error: 'Not authenticated' };
+    }
+    try {
+      const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.UPDATE_ACCOUNT}/${id}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(accountData),
+      });
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          await loadAccounts();
+          return { success: true };
+        } else {
+          return { success: false, error: result.message };
+        }
+      } else if (response.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+        return { success: false, error: 'Authentication failed' };
+      } else {
+        const error = await response.json();
+        return { success: false, error: error.detail || 'Failed to update account' };
+      }
+    } catch (error) {
+      console.error('Error updating account:', error);
+      return { success: false, error: 'Network error. Please try again.' };
+    }
+  };
+
+  const deleteAccount = async (id) => {
+    if (!user || !localStorage.getItem('token')) {
+      return { success: false, error: 'Not authenticated' };
+    }
+    try {
+      const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.DELETE_ACCOUNT}/${id}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+      });
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          await loadAccounts();
+          return { success: true };
+        } else {
+          return { success: false, error: result.message };
+        }
+      } else if (response.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+        return { success: false, error: 'Authentication failed' };
+      } else {
+        const error = await response.json();
+        return { success: false, error: error.detail || 'Failed to delete account' };
+      }
+    } catch (error) {
+      console.error('Error deleting account:', error);
+      return { success: false, error: 'Network error. Please try again.' };
+    }
+  };
+
   const value = {
     transactions,
     categories,
@@ -437,6 +502,8 @@ export const TransactionProvider = ({ children }) => {
     addCategory,
     addSubCategory,
     addAccount,
+    updateAccount,
+    deleteAccount,
     loadTransactions,
     loadCategories,
     loadAccounts,
