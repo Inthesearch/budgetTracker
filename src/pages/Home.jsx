@@ -5,18 +5,21 @@ import { toast } from 'react-toastify';
 import TransactionModal from '../components/TransactionModal.jsx';
 import TransactionList from '../components/TransactionList.jsx';
 import BudgetGraph from '../components/BudgetGraph.jsx';
+import AccountsSummary from '../components/AccountsSummary.jsx';
+import AccountsManagerModal from '../components/AccountsManagerModal.jsx';
 import { formatCategoryName, formatSubcategoryName, formatAccountName } from '../utils/formatters.js';
 
 import './Home.css';
 
 const Home = () => {
   const { user, logout } = useAuth();
-  const { transactions, loading, deleteTransaction } = useTransactions();
+  const { transactions, loading, deleteTransaction, accounts } = useTransactions();
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(null);
   const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [showAccountsManager, setShowAccountsManager] = useState(false);
 
   // Helper function to get category name with proper case
   const getCategoryName = (category) => {
@@ -116,8 +119,10 @@ const Home = () => {
           <BudgetGraph />
         </div>
 
-        {/* Right Side - Add Transaction Button and Transaction List */}
+        {/* Right Side - Accounts Summary, Add Transaction Button and Transaction List */}
         <div className="home-right">
+          {/* Accounts Summary */}
+          <AccountsSummary accounts={accounts} onManage={() => setShowAccountsManager(true)} />
           {/* Add Transaction Button */}
           <div className="add-transaction-section">
             <button 
@@ -148,6 +153,12 @@ const Home = () => {
           onClose={handleCloseModals}
           onSuccess={handleTransactionSuccess}
         />
+      )}
+
+      {showAccountsManager && (
+        <div className="modal-overlay">
+          <AccountsManagerModal onClose={() => setShowAccountsManager(false)} />
+        </div>
       )}
 
       {showDeleteModal && (

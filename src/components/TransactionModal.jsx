@@ -12,7 +12,8 @@ const TransactionModal = ({ transaction, onClose, onSuccess }) => {
     updateTransaction,
     addCategory,
     addSubCategory,
-    addAccount
+    addAccount,
+    loadCategories
   } = useTransactions();
 
   const [formData, setFormData] = useState({
@@ -24,6 +25,7 @@ const TransactionModal = ({ transaction, onClose, onSuccess }) => {
     type: 'expense',
     notes: ''
   });
+  const [toAccountId, setToAccountId] = useState('');
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [showNewCategory, setShowNewCategory] = useState(false);
@@ -32,6 +34,43 @@ const TransactionModal = ({ transaction, onClose, onSuccess }) => {
   const [newCategory, setNewCategory] = useState('');
   const [newSubCategory, setNewSubCategory] = useState('');
   const [newAccount, setNewAccount] = useState('');
+
+  // Ensure we have a dedicated Transfer category and subcategory; returns their IDs
+  const ensureTransferCategoryAndSubcategory = async () => {
+    // Find existing transfer category (names are normalized to lowercase in backend)
+    let transferCategory = categories.find(c => {
+      const name = typeof c === 'string' ? c : c.name;
+      return name && name.toLowerCase() === 'transfer';
+    });
+
+    let transferCategoryId = transferCategory && (typeof transferCategory === 'string' ? null : transferCategory.id);
+    if (!transferCategoryId) {
+      const res = await addCategory({ name: 'transfer' });
+      if (!res.success) {
+        throw new Error(res.error || 'Failed to create Transfer category');
+      }
+      transferCategoryId = res.id;
+    }
+
+    // Find existing transfer subcategory under this category
+    let transferSubId = undefined;
+    const subs = subCategories[transferCategoryId] || [];
+    const existingSub = subs.find(s => {
+      const name = typeof s === 'string' ? s : s.name;
+      return name && name.toLowerCase() === 'transfer';
+    });
+    if (existingSub) {
+      transferSubId = typeof existingSub === 'string' ? null : existingSub.id;
+    } else {
+      const subRes = await addSubCategory({ name: 'transfer', category_id: transferCategoryId });
+      if (!subRes.success) {
+        throw new Error(subRes.error || 'Failed to create Transfer sub-category');
+      }
+      transferSubId = subRes.id;
+    }
+
+    return { categoryId: transferCategoryId, subCategoryId: transferSubId };
+  };
 
   // Helper function to get category name with proper case
   const getCategoryName = (category) => {
@@ -102,12 +141,22 @@ const TransactionModal = ({ transaction, onClose, onSuccess }) => {
       newErrors.account_id = 'Account is required';
     }
 
-    if (!formData.category_id) {
+    if (formData.type !== 'transfer' && !formData.category_id) {
       newErrors.category_id = 'Category is required';
     }
 
-    if (!formData.sub_category_id) {
-      newErrors.sub_category_id = 'Sub-Category is required';
+    if (formData.type !== 'transfer') {
+      if (!formData.sub_category_id) {
+        newErrors.sub_category_id = 'Sub-Category is required';
+      }
+    }
+
+    if (formData.type === 'transfer') {
+      if (!toAccountId) {
+        newErrors.to_account_id = 'To Account is required';
+      } else if (toAccountId && formData.account_id && toAccountId === formData.account_id) {
+        newErrors.to_account_id = 'Choose a different account to transfer to';
+      }
     }
 
     setErrors(newErrors);
@@ -137,10 +186,23 @@ const TransactionModal = ({ transaction, onClose, onSuccess }) => {
         sub_category_id: ''
       }));
     }
+
+    // When switching to transfer, clear category/sub-category selections
+    if (name === 'type') {
+      if (value === 'transfer') {
+        setFormData(prev => ({
+          ...prev,
+          category_id: '',
+          sub_category_id: ''
+        }));
+      }
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    console.log('formData', formData);
     
     if (!validateForm()) {
       return;
@@ -150,9 +212,49 @@ const TransactionModal = ({ transaction, onClose, onSuccess }) => {
 
     try {
       // Convert date to timezone-aware datetime format
-      // Use the selected date as midnight UTC to avoid timezone conversion issues
       const dateTime = formData.date + 'T00:00:00Z';
-      
+
+      if (formData.type === 'transfer') {
+        // Option B: create two transactions under the hood
+        const amount = parseFloat(formData.amount);
+        const fromAccountId = parseInt(formData.account_id);
+        const toAccId = parseInt(toAccountId);
+
+        // Resolve dedicated transfer category/subcategory
+        const { categoryId: transferCategoryId, subCategoryId: transferSubCategoryId } = await ensureTransferCategoryAndSubcategory();
+
+        const base = {
+          date: dateTime,
+          notes: formData.notes,
+          category_id: transferCategoryId,
+          sub_category_id: transferSubCategoryId,
+        };
+
+        const expenseTx = {
+          ...base,
+          amount,
+          type: 'expense',
+          account_id: fromAccountId,
+        };
+
+        const incomeTx = {
+          ...base,
+          amount,
+          type: 'income',
+          account_id: toAccId,
+        };
+
+        const res1 = await addTransaction(expenseTx);
+        if (!res1.success) throw new Error(res1.error || 'Failed to create expense transfer leg');
+
+        const res2 = await addTransaction(incomeTx);
+        if (!res2.success) throw new Error(res2.error || 'Failed to create income transfer leg');
+
+        onSuccess(isEditing ? 'Transfer updated successfully!' : 'Transfer recorded successfully!');
+        return;
+      }
+
+      // Non-transfer or editing path (backend handles edit-as-new and balances)
       const transactionData = {
         amount: parseFloat(formData.amount),
         date: dateTime,
@@ -313,16 +415,42 @@ const TransactionModal = ({ transaction, onClose, onSuccess }) => {
             </div>
           </div>
 
+          {formData.type === 'transfer' && (
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="to_account_id">To Account *</label>
+                <select
+                  id="to_account_id"
+                  name="to_account_id"
+                  value={toAccountId}
+                  onChange={(e) => setToAccountId(e.target.value)}
+                  className={errors.to_account_id ? 'error' : ''}
+                >
+                  <option value="">Choose To Account</option>
+                  {accounts
+                    .filter(acc => (acc.id || acc) !== parseInt(formData.account_id || '0'))
+                    .map(acc => (
+                      <option key={acc.id || acc} value={acc.id || acc}>
+                        {getAccountName(acc)}
+                      </option>
+                    ))}
+                </select>
+                {errors.to_account_id && <span className="error-message">{errors.to_account_id}</span>}
+              </div>
+            </div>
+          )}
+
           <div className="form-row">
             <div className="form-group">
               <label htmlFor="category_id">Category *</label>
               <div className="select-with-add">
-                <select
+                 <select
                   id="category_id"
                   name="category_id"
-                  value={formData.category_id}
+                  value={formData.type === 'transfer' ? '' : formData.category_id}
                   onChange={handleInputChange}
-                  className={errors.category_id ? 'error' : ''}
+                   className={errors.category_id ? 'error' : ''}
+                   disabled={formData.type === 'transfer'}
                 >
                   <option value="">Choose Category</option>
                   {categories.map(category => (
@@ -335,6 +463,7 @@ const TransactionModal = ({ transaction, onClose, onSuccess }) => {
                   type="button"
                   className="add-button"
                   onClick={() => setShowNewCategory(true)}
+                  disabled={formData.type === 'transfer'}
                 >
                   +
                 </button>
@@ -362,7 +491,7 @@ const TransactionModal = ({ transaction, onClose, onSuccess }) => {
                   name="sub_category_id"
                   value={formData.sub_category_id}
                   onChange={handleInputChange}
-                  disabled={!formData.category_id}
+                  disabled={!formData.category_id || formData.type === 'transfer'}
                   className={errors.sub_category_id ? 'error' : ''}
                 >
                   <option value="">Choose Sub-Category</option>
@@ -376,7 +505,7 @@ const TransactionModal = ({ transaction, onClose, onSuccess }) => {
                   type="button"
                   className="add-button"
                   onClick={() => setShowNewSubCategory(true)}
-                  disabled={!formData.category_id}
+                  disabled={!formData.category_id || formData.type === 'transfer'}
                 >
                   +
                 </button>

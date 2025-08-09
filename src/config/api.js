@@ -30,4 +30,6 @@ export const API_ENDPOINTS = {
   // Account endpoints
   GET_ACCOUNTS: '/api/v1/account/list',
   ADD_ACCOUNT: '/api/v1/account/addAccount',
+  UPDATE_ACCOUNT: '/api/v1/account/editAccount',
+  DELETE_ACCOUNT: '/api/v1/account/deleteAccount',
 }; 

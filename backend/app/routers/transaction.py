@@ -21,7 +21,7 @@ async def add_transaction(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Add a new transaction."""
+    """Add a new transaction and apply its effect to the account balance."""
     # Verify account exists and belongs to user
     account = await db.execute(select(Account).where(
         Account.id == transaction_data.account_id,
@@ -84,9 +84,15 @@ async def add_transaction(
         account_id=transaction_data.account_id,
         user_id=current_user.id
     )
-    print("db_transaction:" + str(db_transaction))
-
     db.add(db_transaction)
+
+    # Apply balance side-effect
+    # Note: For Option B (transfer as two transactions), we only handle income/expense here
+    if str(transaction_data.type) == "income":
+        account.balance = (account.balance or 0) + transaction_data.amount
+    elif str(transaction_data.type) == "expense":
+        account.balance = (account.balance or 0) - transaction_data.amount
+
     await db.commit()
     await db.refresh(db_transaction)
     
@@ -103,7 +109,7 @@ async def edit_transaction(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Edit an existing transaction."""
+    """Edit-as-new: deactivate the old transaction, reverse its effect, then create a new one and apply its effect."""
     # Find transaction
     transaction = await db.execute(select(Transaction).where(
         Transaction.id == transaction_id,
@@ -170,24 +176,64 @@ async def edit_transaction(
                 detail="Sub-category does not belong to the specified category"
             )
     
-    # Update transaction
-    if transaction_data.amount is not None:
-        transaction.amount = transaction_data.amount
-    if transaction_data.type is not None:
-        transaction.type = transaction_data.type
-    if transaction_data.date is not None:
-        transaction.date = transaction_data.date
-    if transaction_data.notes is not None:
-        transaction.notes = transaction_data.notes
-    if transaction_data.category_id is not None:
-        transaction.category_id = transaction_data.category_id
-    if transaction_data.sub_category_id is not None:
-        transaction.sub_category_id = transaction_data.sub_category_id
-    if transaction_data.account_id is not None:
-        transaction.account_id = transaction_data.account_id
-    
+    # Reverse old balance effect
+    old_account = await db.execute(select(Account).where(
+        Account.id == transaction.account_id,
+        Account.user_id == current_user.id,
+        Account.is_active == True
+    ))
+    old_account = old_account.scalars().first()
+
+    if old_account:
+        if str(transaction.type) == "income":
+            old_account.balance = (old_account.balance or 0) - transaction.amount
+        elif str(transaction.type) == "expense":
+            old_account.balance = (old_account.balance or 0) + transaction.amount
+
+    # Deactivate old transaction
+    transaction.is_active = False
+
+    # Build new transaction using provided fields overriding old
+    new_amount = transaction_data.amount if transaction_data.amount is not None else transaction.amount
+    new_type = transaction_data.type if transaction_data.type is not None else transaction.type
+    new_date = transaction_data.date if transaction_data.date is not None else transaction.date
+    new_notes = transaction_data.notes if transaction_data.notes is not None else transaction.notes
+    new_category_id = transaction_data.category_id if transaction_data.category_id is not None else transaction.category_id
+    new_sub_category_id = transaction_data.sub_category_id if transaction_data.sub_category_id is not None else transaction.sub_category_id
+    new_account_id = transaction_data.account_id if transaction_data.account_id is not None else transaction.account_id
+
+    # Verify new account exists
+    new_account = await db.execute(select(Account).where(
+        Account.id == new_account_id,
+        Account.user_id == current_user.id,
+        Account.is_active == True
+    ))
+    new_account = new_account.scalars().first()
+    if not new_account:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Account not found"
+        )
+
+    new_transaction = Transaction(
+        amount=new_amount,
+        type=new_type,
+        date=new_date,
+        notes=new_notes,
+        category_id=new_category_id,
+        sub_category_id=new_sub_category_id,
+        account_id=new_account_id,
+        user_id=current_user.id
+    )
+    db.add(new_transaction)
+
+    # Apply new balance effect
+    if str(new_type) == "income":
+        new_account.balance = (new_account.balance or 0) + new_amount
+    elif str(new_type) == "expense":
+        new_account.balance = (new_account.balance or 0) - new_amount
+
     await db.commit()
-    await db.refresh(transaction)
     
     return BaseResponse(
         success=True,
@@ -200,7 +246,7 @@ async def delete_transaction(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Soft delete a transaction."""
+    """Soft delete a transaction and reverse its balance effect."""
     # Find transaction
     transaction = await db.execute(select(Transaction).where(
         Transaction.id == transaction_id,
@@ -215,6 +261,20 @@ async def delete_transaction(
             detail="Transaction not found"
         )
     
+    # Reverse balance effect
+    account = await db.execute(select(Account).where(
+        Account.id == transaction.account_id,
+        Account.user_id == current_user.id,
+        Account.is_active == True
+    ))
+    account = account.scalars().first()
+
+    if account:
+        if str(transaction.type) == "income":
+            account.balance = (account.balance or 0) - transaction.amount
+        elif str(transaction.type) == "expense":
+            account.balance = (account.balance or 0) + transaction.amount
+
     # Soft delete transaction
     transaction.is_active = False
     await db.commit()
