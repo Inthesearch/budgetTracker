@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { formatAccountName } from '../utils/formatters.js';
 import './AccountsSummary.css';
 
 const formatCurrency = (amount, currency = 'USD') => {
@@ -18,6 +19,7 @@ const AccountsSummary = ({ accounts = [], onManage }) => {
     };
   }, [accounts]);
 
+
   return (
     <div className="accounts-summary">
       <div className="accounts-summary__header">
@@ -35,7 +37,7 @@ const AccountsSummary = ({ accounts = [], onManage }) => {
           const percent = Math.max(0, Math.min(100, ((account.balance || 0) / maxBalance) * 100));
           return (
             <div className="accounts-summary__row" key={account.id}>
-              <div className="accounts-summary__name" title={account.name}>{account.name}</div>
+              <div className="accounts-summary__name" title={formatAccountName(account.name)}>{formatAccountName(account.name)}</div>
               <div className="accounts-summary__bar">
                 <div className="accounts-summary__bar-fill" style={{ width: `${percent}%` }} />
               </div>
