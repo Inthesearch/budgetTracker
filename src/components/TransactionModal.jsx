@@ -211,8 +211,8 @@ const TransactionModal = ({ transaction, onClose, onSuccess }) => {
     setIsLoading(true);
 
     try {
-      // Convert date to timezone-aware datetime format
-      const dateTime = formData.date + 'T00:00:00Z';
+      // Convert date to local datetime format
+      const dateTime = formData.date + 'T00:00:00';
 
       if (formData.type === 'transfer') {
         // Option B: create two transactions under the hood
