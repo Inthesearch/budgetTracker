@@ -12,7 +12,7 @@ const BudgetGraph = () => {
     end: new Date().toLocaleDateString('en-CA')
   });
   const [selectedCategories, setSelectedCategories] = useState([]);
-
+  console.log('dateRange', dateRange);
 
   // Helper function to get category name with proper case
   const getCategoryName = (category) => {
@@ -80,12 +80,13 @@ const BudgetGraph = () => {
   // Filter transactions based on date range and selected categories
   const filteredTransactions = useMemo(() => {
     const filtered = transactions.filter(transaction => {
-      const transactionDate = new Date(transaction.date);
-      const startDate = new Date(dateRange.start);
-      const endDate = new Date(dateRange.end);  
+      // Normalize dates to YYYY-MM-DD format for comparison
+      const transactionDateStr = new Date(transaction.date).toISOString().split('T')[0];
+      const startDateStr = dateRange.start;
+      const endDateStr = dateRange.end;
       
-      // Date filter
-      if (transactionDate < startDate || transactionDate > endDate) {
+      // Date filter - compare as strings to avoid timezone issues
+      if (transactionDateStr < startDateStr || transactionDateStr > endDateStr) {
         return false;
       }
       

@@ -58,7 +58,7 @@ export const TransactionProvider = ({ children }) => {
 
              if (response.ok) {
          const data = await response.json();
-
+         console.log('data', data);
          setTransactions(data);
        } else if (response.status === 401) {
         // Token expired or invalid
@@ -139,10 +139,11 @@ export const TransactionProvider = ({ children }) => {
         method: 'GET',
         headers: getAuthHeaders(),
       });
-
+      console.log('response', response);
       if (response.ok) {
         const data = await response.json();
         setAccounts(data);
+        console.log('accounts', data);
       } else if (response.status === 401) {
         console.error('Authentication failed, redirecting to login');
         localStorage.removeItem('token');
@@ -172,8 +173,24 @@ export const TransactionProvider = ({ children }) => {
       if (response.ok) {
         const result = await response.json();
         if (result.success) {
-          // Reload transactions and accounts to reflect balances
-          await Promise.all([loadTransactions(), loadAccounts()]);
+          // Update account balance directly in frontend state
+          setAccounts(prevAccounts => {
+            return prevAccounts.map(account => {
+              if (account.id === transactionData.account_id) {
+                let newBalance = account.balance || 0;
+                if (transactionData.type === 'income') {
+                  newBalance += transactionData.amount;
+                } else if (transactionData.type === 'expense') {
+                  newBalance -= transactionData.amount;
+                }
+                return { ...account, balance: newBalance };
+              }
+              return account;
+            });
+          });
+          
+          // Reload transactions
+          await loadTransactions();
           return { success: true, transaction: result.data };
         } else {
           return { success: false, error: result.message };
@@ -211,7 +228,7 @@ export const TransactionProvider = ({ children }) => {
       if (response.ok) {
         const result = await response.json();
         if (result.success) {
-          // Reload transactions and accounts to reflect balances
+          // For edit-as-new, we need to reload accounts since the backend handles balance adjustments
           await Promise.all([loadTransactions(), loadAccounts()]);
           return { success: true };
         } else {
@@ -249,7 +266,7 @@ export const TransactionProvider = ({ children }) => {
       if (response.ok) {
         const result = await response.json();
         if (result.success) {
-          // Reload transactions and accounts to reflect balances
+          // For delete, we need to reload accounts since the backend handles balance adjustments
           await Promise.all([loadTransactions(), loadAccounts()]);
           return { success: true };
         } else {
@@ -425,6 +442,7 @@ export const TransactionProvider = ({ children }) => {
   };
 
   const updateAccount = async (id, accountData) => {
+    console.log('updateAccount', id, accountData);
     if (!user || !localStorage.getItem('token')) {
       return { success: false, error: 'Not authenticated' };
     }
