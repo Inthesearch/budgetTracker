@@ -21,12 +21,41 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     // Check if user is logged in from localStorage
     const savedUser = localStorage.getItem('user');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
+    const token = localStorage.getItem('token');
     
+    if (savedUser && token) {
+      setUser(JSON.parse(savedUser));
+      // Optionally refresh user data from server
+      refreshUserData();
     }
     setLoading(false);
   }, []);
+
+  const refreshUserData = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.GET_CURRENT_USER}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const userData = await response.json();
+        setUser(userData);
+        localStorage.setItem('user', JSON.stringify(userData));
+      } else if (response.status === 401) {
+        // Token expired, logout user
+        logout();
+      }
+    } catch (error) {
+      console.error('Error refreshing user data:', error);
+    }
+  };
 
   const login = async (email, password) => {
     try {
@@ -40,10 +69,28 @@ export const AuthProvider = ({ children }) => {
 
       if (response.ok) {
         const data = await response.json();
-        const userData = { id: 1, email, name: 'User' }; // Extract user data from token
-        setUser(userData);
-        localStorage.setItem('user', JSON.stringify(userData));
         localStorage.setItem('token', data.access_token);
+        
+        // Fetch user data using the token
+        const userResponse = await fetch(`${API_BASE_URL}${API_ENDPOINTS.GET_CURRENT_USER}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${data.access_token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (userResponse.ok) {
+          const userData = await userResponse.json();
+          setUser(userData);
+          localStorage.setItem('user', JSON.stringify(userData));
+        } else {
+          // Fallback to basic user data if fetch fails
+          const userData = { id: 1, email, full_name: email };
+          setUser(userData);
+          localStorage.setItem('user', JSON.stringify(userData));
+        }
+        
         return { success: true };
       } else {
         const error = await response.json();
@@ -113,6 +160,7 @@ export const AuthProvider = ({ children }) => {
     register,
     forgotPassword,
     loading,
+    refreshUserData,
   };
 
   return (
