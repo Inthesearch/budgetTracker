@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     # Application
     debug: bool = os.getenv("DEBUG", "True").lower() == "true"
     
-    print(f"CORS Origins: {os.getenv('CORS_ORIGINS')}")
+    # print(f"CORS Origins: {os.getenv('CORS_ORIGINS')}")
 
     # CORS Origins - handle both environment variable and default list
     @property

@@ -86,6 +86,13 @@ const TransactionModal = ({ transaction, onClose, onSuccess }) => {
         type: transaction.type || 'expense',
         notes: transaction.notes || ''
       });
+      
+      // Set to_account_id for transfer transactions
+      if (transaction.type === 'transfer' && transaction.to_account) {
+        setToAccountId(getAccountId(transaction.to_account) || '');
+      } else {
+        setToAccountId('');
+      }
     }
   }, [transaction]);
 

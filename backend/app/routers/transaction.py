@@ -245,6 +245,20 @@ async def edit_transaction(
             old_account.balance = (old_account.balance or 0) - transaction.amount
         elif str(transaction.type) == "expense":
             old_account.balance = (old_account.balance or 0) + transaction.amount
+        elif str(transaction.type) == "transfer":
+            # For transfers, reverse both accounts
+            old_account.balance = (old_account.balance or 0) + transaction.amount
+            
+            # Also reverse the to_account if it exists
+            if transaction.to_account_id:
+                old_to_account = await db.execute(select(Account).where(
+                    Account.id == transaction.to_account_id,
+                    Account.user_id == current_user.id,
+                    Account.is_active == True
+                ))
+                old_to_account = old_to_account.scalars().first()
+                if old_to_account:
+                    old_to_account.balance = (old_to_account.balance or 0) - transaction.amount
 
     # Deactivate old transaction
     transaction.is_active = False
@@ -257,6 +271,7 @@ async def edit_transaction(
     new_category_id = transaction_data.category_id if transaction_data.category_id is not None else transaction.category_id
     new_sub_category_id = transaction_data.sub_category_id if transaction_data.sub_category_id is not None else transaction.sub_category_id
     new_account_id = transaction_data.from_account_id if transaction_data.from_account_id is not None else transaction.from_account_id
+    new_to_account_id = transaction_data.to_account_id if transaction_data.to_account_id is not None else transaction.to_account_id
 
     # Verify new account exists
     new_account = await db.execute(select(Account).where(
@@ -271,6 +286,35 @@ async def edit_transaction(
             detail="Account not found"
         )
 
+    # Verify to_account for transfers
+    new_to_account = None
+    if new_type == TransactionType.TRANSFER:
+        if not new_to_account_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="to_account_id is required for transfer transactions"
+            )
+        
+        new_to_account = await db.execute(select(Account).where(
+            Account.id == new_to_account_id,
+            Account.user_id == current_user.id,
+            Account.is_active == True
+        ))
+        new_to_account = new_to_account.scalars().first()
+        
+        if not new_to_account:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="To account not found"
+            )
+        
+        # Ensure from and to accounts are different
+        if new_account_id == new_to_account_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="From and to accounts must be different"
+            )
+
     new_transaction = Transaction(
         amount=new_amount,
         type=new_type,
@@ -279,6 +323,7 @@ async def edit_transaction(
         category_id=new_category_id,
         sub_category_id=new_sub_category_id,
         from_account_id=new_account_id,
+        to_account_id=new_to_account_id,
         user_id=current_user.id
     )
     db.add(new_transaction)
@@ -288,6 +333,10 @@ async def edit_transaction(
         new_account.balance = (new_account.balance or 0) + new_amount
     elif str(new_type) == "expense":
         new_account.balance = (new_account.balance or 0) - new_amount
+    elif str(new_type) == "transfer":
+        # For transfers, decrease from account and increase to account
+        new_account.balance = (new_account.balance or 0) - new_amount
+        new_to_account.balance = (new_to_account.balance or 0) + new_amount
 
     await db.commit()
     
@@ -330,6 +379,20 @@ async def delete_transaction(
             account.balance = (account.balance or 0) - transaction.amount
         elif str(transaction.type) == "expense":
             account.balance = (account.balance or 0) + transaction.amount
+        elif str(transaction.type) == "transfer":
+            # For transfers, reverse both accounts
+            account.balance = (account.balance or 0) + transaction.amount
+            
+            # Also reverse the to_account if it exists
+            if transaction.to_account_id:
+                to_account = await db.execute(select(Account).where(
+                    Account.id == transaction.to_account_id,
+                    Account.user_id == current_user.id,
+                    Account.is_active == True
+                ))
+                to_account = to_account.scalars().first()
+                if to_account:
+                    to_account.balance = (to_account.balance or 0) - transaction.amount
 
     # Soft delete transaction
     transaction.is_active = False
@@ -492,28 +555,8 @@ async def import_transactions(
         created_subcategories = 0
         validation_errors = []
         
-        # Get or create transfer category and subcategory
-        transfer_category = await db.execute(select(Category).where(
-            and_(Category.name == 'transfer', Category.user_id == current_user.id, Category.is_active == True)
-        ))
-        transfer_category = transfer_category.scalar_one_or_none()
-        
-        if not transfer_category:
-            transfer_category = Category(name='transfer', user_id=current_user.id)
-            db.add(transfer_category)
-            await db.flush()
-            created_categories += 1
-        
-        transfer_subcategory = await db.execute(select(SubCategory).where(
-            and_(SubCategory.name == 'transfer', SubCategory.category_id == transfer_category.id, SubCategory.user_id == current_user.id, SubCategory.is_active == True)
-        ))
-        transfer_subcategory = transfer_subcategory.scalar_one_or_none()
-        
-        if not transfer_subcategory:
-            transfer_subcategory = SubCategory(name='transfer', category_id=transfer_category.id, user_id=current_user.id)
-            db.add(transfer_subcategory)
-            await db.flush()
-            created_subcategories += 1
+        # Note: Transfer transactions no longer use categories/subcategories
+        # They are stored as single transactions with from_account_id and to_account_id
         
         # Process each row
         for index, row in df.iterrows():
@@ -645,39 +688,25 @@ async def import_transactions(
                         await db.flush()
                         created_accounts += 1
                     
-                    # Create two transactions for transfer (expense from source, income to destination)
-                    
-                    # Create expense transaction from source account
-                    expense_transaction = Transaction(
+                    # Create single transfer transaction
+                    transfer_transaction = Transaction(
                         amount=amount,
-                        type='expense',
+                        type='transfer',
                         date=date_obj,
-                        notes=f"Transfer to {to_account_name}: {str(row['Notes']).strip() if pd.notna(row['Notes']) else ''}",
-                        category_id=transfer_category.id,
-                        sub_category_id=transfer_subcategory.id,
+                        notes=str(row['Notes']).strip() if pd.notna(row['Notes']) else '',
+                        category_id=None,  # Transfers don't have categories
+                        sub_category_id=None,  # Transfers don't have sub-categories
                         from_account_id=account.id,
+                        to_account_id=to_account.id,
                         user_id=current_user.id
                     )
-                    db.add(expense_transaction)
-                    
-                    # Create income transaction to destination account
-                    income_transaction = Transaction(
-                        amount=amount,
-                        type='income',
-                        date=date_obj,
-                        notes=f"Transfer from {account_name}: {str(row['Notes']).strip() if pd.notna(row['Notes']) else ''}",
-                        category_id=transfer_category.id,
-                        sub_category_id=transfer_subcategory.id,
-                        from_account_id=to_account.id,
-                        user_id=current_user.id
-                    )
-                    db.add(income_transaction)
+                    db.add(transfer_transaction)
                     
                     # Update account balances
                     account.balance = (account.balance or 0) - amount
                     to_account.balance = (to_account.balance or 0) + amount
                     
-                    imported_count += 2  # Count as 2 transactions
+                    imported_count += 1  # Count as 1 transaction
                 
                 else:
                     # Handle income/expense transactions
