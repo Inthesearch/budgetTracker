@@ -15,7 +15,7 @@ from ..schemas import (
     UserCreate, UserLogin, UserResponse, Token, 
     PasswordResetRequest, PasswordResetConfirm, BaseResponse
 )
-from ..auth import get_password_hash, authenticate_user, create_access_token
+from ..auth import get_password_hash, authenticate_user, create_access_token, get_current_user
 from ..config import settings
 
 router = APIRouter(tags=["Authentication"])
@@ -191,4 +191,9 @@ async def reset_password(reset_data: PasswordResetConfirm, db: Session = Depends
     return BaseResponse(
         success=True,
         message="Password reset successfully"
-    ) 
+    )
+
+@router.get("/me", response_model=UserResponse)
+async def get_current_user_info(current_user: User = Depends(get_current_user)):
+    """Get current user information."""
+    return current_user 

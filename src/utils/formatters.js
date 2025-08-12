@@ -61,9 +61,9 @@ export const formatSubcategoryName = (name) => {
  */
 export const formatAccountName = (name) => {
   if (!name) return name;
-  console.log('formatAccountName input:', name); // Debug log
+  // console.log('formatAccountName input:', name); // Debug log
   const result = toProperCase(name);
-  console.log('formatAccountName output:', result); // Debug log
+  // console.log('formatAccountName output:', result); // Debug log
   return result;
 };
 

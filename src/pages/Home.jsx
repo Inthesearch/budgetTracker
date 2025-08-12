@@ -8,7 +8,7 @@ import BudgetGraph from '../components/BudgetGraph.jsx';
 import AccountsSummary from '../components/AccountsSummary.jsx';
 import AccountsManagerModal from '../components/AccountsManagerModal.jsx';
 import ImportModal from '../components/ImportModal.jsx';
-import { formatCategoryName, formatSubcategoryName, formatAccountName } from '../utils/formatters.js';
+import { formatCategoryName, formatSubcategoryName, formatAccountName, formatName } from '../utils/formatters.js';
 
 import './Home.css';
 
@@ -107,7 +107,7 @@ const Home = () => {
           <h1>💰 Budget Tracker</h1>
         </div>
         <div className="header-right">
-          <span className="user-info">Welcome, {user?.name || user?.email}</span>
+          <span className="user-info">Welcome, {formatName(user?.full_name) || formatName(user?.username) || user?.email}</span>
           <button onClick={handleLogout} className="logout-button">
             Logout
           </button>

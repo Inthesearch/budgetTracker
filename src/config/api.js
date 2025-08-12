@@ -12,6 +12,7 @@ export const API_ENDPOINTS = {
   LOGIN: '/api/v1/login',
   REGISTER: '/api/v1/register',
   FORGOT_PASSWORD: '/api/v1/forgotPass',
+  GET_CURRENT_USER: '/api/v1/me',
   
   // Transaction endpoints
   GET_TRANSACTIONS: '/api/v1/transaction/getTransactionRecord',
