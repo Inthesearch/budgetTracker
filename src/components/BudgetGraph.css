@@ -94,34 +94,7 @@
   font-size: 0.9rem;
 }
 
-.category-filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  max-height: 120px;
-  overflow-y: auto;
-}
-
-.checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 0.9rem;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
-  background: white;
-  border: 1px solid #ddd;
-  transition: background-color 0.3s ease;
-}
-
-.checkbox-label:hover {
-  background: #e9ecef;
-}
-
-.checkbox-label input {
-  margin: 0;
-}
+/* MultiSelect styles are handled by MultiSelect.css */
 
 .clear-filters-btn {
   background: #dc3545;

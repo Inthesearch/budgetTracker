@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect  } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useTransactions } from '../context/TransactionContext.jsx';
 import { formatCategoryName, formatSubcategoryName } from '../utils/formatters.js';
+import MultiSelect from './MultiSelect.jsx';
 import './BudgetGraph.css';
 
 const BudgetGraph = () => {
@@ -182,15 +183,7 @@ const BudgetGraph = () => {
     }
   };
 
-  const handleCategoryFilterChange = (category) => {
-    setSelectedCategories(prev => {
-      if (prev.includes(category)) {
-        return prev.filter(c => c !== category);
-      } else {
-        return [...prev, category];
-      }
-    });
-  };
+
 
   const clearFilters = () => {
     setDateRange({
@@ -244,18 +237,13 @@ const BudgetGraph = () => {
         {!selectedCategory && (
           <div className="filter-group">
             <label>Categories:</label>
-            <div className="category-filters">
-              {uniqueCategories.map(category => (
-                <label key={category} className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={selectedCategories.includes(category)}
-                    onChange={() => handleCategoryFilterChange(category)}
-                  />
-                  {category}
-                </label>
-              ))}
-            </div>
+            <MultiSelect
+              options={uniqueCategories}
+              selectedValues={selectedCategories}
+              onSelectionChange={setSelectedCategories}
+              placeholder="Select categories..."
+              searchable={true}
+            />
           </div>
         )}
 
