@@ -1,14 +1,19 @@
 import React, { useState, useMemo } from 'react';
 import { formatCategoryName, formatSubcategoryName, formatAccountName } from '../utils/formatters.js';
+import MultiSelect from './MultiSelect.jsx';
 import './TransactionList.css';
 
 const TransactionList = ({ transactions, onEdit, onDelete, onView, loading }) => {
   const [sortBy, setSortBy] = useState('date');
   const [sortOrder, setSortOrder] = useState('desc');
   const [filters, setFilters] = useState({
-    type: '',
-    category: '',
-    account: ''
+    types: [],
+    categories: [],
+    accounts: [],
+    dateRange: {
+      start: '',
+      end: ''
+    }
   });
 
   const formatCurrency = (amount) => {
@@ -65,9 +70,22 @@ const TransactionList = ({ transactions, onEdit, onDelete, onView, loading }) =>
   // Filter and sort transactions
   const filteredAndSortedTransactions = useMemo(() => {
     let filtered = transactions.filter(transaction => {
-      if (filters.type && transaction.type !== filters.type) return false;
-      if (filters.category && getCategoryName(transaction.category) !== filters.category) return false;
-      if (filters.account && getAccountName(transaction.from_account) !== filters.account) return false;
+      // Type filter (multi-select)
+      if (filters.types.length > 0 && !filters.types.includes(transaction.type)) return false;
+      
+      // Category filter (multi-select)
+      if (filters.categories.length > 0 && !filters.categories.includes(getCategoryName(transaction.category))) return false;
+      
+      // Account filter (multi-select)
+      if (filters.accounts.length > 0 && !filters.accounts.includes(getAccountName(transaction.from_account))) return false;
+      
+      // Date range filter
+      if (filters.dateRange.start || filters.dateRange.end) {
+        const transactionDate = new Date(transaction.date).toISOString().split('T')[0];
+        if (filters.dateRange.start && transactionDate < filters.dateRange.start) return false;
+        if (filters.dateRange.end && transactionDate > filters.dateRange.end) return false;
+      }
+      
       return true;
     });
 
@@ -127,11 +145,25 @@ const TransactionList = ({ transactions, onEdit, onDelete, onView, loading }) =>
     }));
   };
 
+  const handleDateRangeChange = (field, value) => {
+    setFilters(prev => ({
+      ...prev,
+      dateRange: {
+        ...prev.dateRange,
+        [field]: value
+      }
+    }));
+  };
+
   const clearFilters = () => {
     setFilters({
-      type: '',
-      category: '',
-      account: ''
+      types: [],
+      categories: [],
+      accounts: [],
+      dateRange: {
+        start: '',
+        end: ''
+      }
     });
   };
 
@@ -158,42 +190,55 @@ const TransactionList = ({ transactions, onEdit, onDelete, onView, loading }) =>
       {/* Filters */}
       <div className="filters-section">
         <div className="filter-group">
-          <label>Type:</label>
-          <select
-            value={filters.type}
-            onChange={(e) => handleFilterChange('type', e.target.value)}
-          >
-            <option value="">All Types</option>
-            {uniqueTypes.map(type => (
-              <option key={type} value={type}>{type}</option>
-            ))}
-          </select>
+          <label>Types:</label>
+          <MultiSelect
+            options={uniqueTypes}
+            selectedValues={filters.types}
+            onSelectionChange={(values) => handleFilterChange('types', values)}
+            placeholder="Select types..."
+            searchable={false}
+          />
         </div>
 
         <div className="filter-group">
-          <label>Category:</label>
-          <select
-            value={filters.category}
-            onChange={(e) => handleFilterChange('category', e.target.value)}
-          >
-            <option value="">All Categories</option>
-            {uniqueCategories.map(category => (
-              <option key={category} value={category}>{category}</option>
-            ))}
-          </select>
+          <label>Categories:</label>
+          <MultiSelect
+            options={uniqueCategories}
+            selectedValues={filters.categories}
+            onSelectionChange={(values) => handleFilterChange('categories', values)}
+            placeholder="Select categories..."
+            searchable={true}
+          />
         </div>
 
         <div className="filter-group">
-          <label>Account:</label>
-          <select
-            value={filters.account}
-            onChange={(e) => handleFilterChange('account', e.target.value)}
-          >
-            <option value="">All Accounts</option>
-            {uniqueAccounts.map(account => (
-              <option key={account} value={account}>{account}</option>
-            ))}
-          </select>
+          <label>Accounts:</label>
+          <MultiSelect
+            options={uniqueAccounts}
+            selectedValues={filters.accounts}
+            onSelectionChange={(values) => handleFilterChange('accounts', values)}
+            placeholder="Select accounts..."
+            searchable={true}
+          />
+        </div>
+
+        <div className="filter-group">
+          <label>Date Range:</label>
+          <div className="date-range-inputs">
+            <input
+              type="date"
+              value={filters.dateRange.start}
+              onChange={(e) => handleDateRangeChange('start', e.target.value)}
+              placeholder="Start date"
+            />
+            <span>to</span>
+            <input
+              type="date"
+              value={filters.dateRange.end}
+              onChange={(e) => handleDateRangeChange('end', e.target.value)}
+              placeholder="End date"
+            />
+          </div>
         </div>
 
         <button onClick={clearFilters} className="clear-filters-btn">
