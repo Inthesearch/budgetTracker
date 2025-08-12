@@ -125,7 +125,8 @@
   justify-content: flex-end;
 }
 
-.add-transaction-button {
+.add-transaction-button,
+.import-transaction-button {
   background: #667eea;
   color: white;
   border: none;
@@ -141,6 +142,17 @@
 
 .add-transaction-button:hover {
   background: #5a6fd8;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.import-transaction-button {
+  background: #10b981;
+  margin-left: 12px;
+}
+
+.import-transaction-button:hover {
+  background: #059669;
   transform: translateY(-1px);
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }

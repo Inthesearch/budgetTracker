@@ -57,7 +57,7 @@ const TransactionList = ({ transactions, onEdit, onDelete, onView, loading }) =>
   )];
   const uniqueAccounts = [...new Set(
     transactions
-      .map(t => getAccountName(t.account))
+      .map(t => getAccountName(t.from_account))
       .filter(Boolean)
   )];
   const uniqueTypes = [...new Set(transactions.map(t => t.type))];
@@ -67,7 +67,7 @@ const TransactionList = ({ transactions, onEdit, onDelete, onView, loading }) =>
     let filtered = transactions.filter(transaction => {
       if (filters.type && transaction.type !== filters.type) return false;
       if (filters.category && getCategoryName(transaction.category) !== filters.category) return false;
-      if (filters.account && getAccountName(transaction.account) !== filters.account) return false;
+      if (filters.account && getAccountName(transaction.from_account) !== filters.account) return false;
       return true;
     });
 
@@ -93,8 +93,8 @@ const TransactionList = ({ transactions, onEdit, onDelete, onView, loading }) =>
           bValue = getCategoryName(b.category) || '';
           break;
         case 'account':
-          aValue = getAccountName(a.account) || '';
-          bValue = getAccountName(b.account) || '';
+          aValue = getAccountName(a.from_account) || '';
+          bValue = getAccountName(b.from_account) || '';
           break;
         default:
           aValue = a[sortBy];
@@ -238,6 +238,7 @@ const TransactionList = ({ transactions, onEdit, onDelete, onView, loading }) =>
                   </span>
                 )}
               </th>
+              <th>To Account</th>
               <th onClick={() => handleSort('amount')} className="sortable">
                 Amount
                 {sortBy === 'amount' && (
@@ -262,10 +263,11 @@ const TransactionList = ({ transactions, onEdit, onDelete, onView, loading }) =>
                     {transaction.type}
                   </span>
                 </td>
-                <td>{getAccountName(transaction.account) || '-'}</td>
+                <td>{getAccountName(transaction.from_account) || '-'}</td>
                 <td>{getCategoryName(transaction.category) || '-'}</td>
+                <td>{transaction.type === 'transfer' ? getAccountName(transaction.to_account) || '-' : '-'}</td>
                 <td className={`amount ${transaction.type}`}>
-                  {transaction.type === 'income' ? '+' : '-'}
+                  {transaction.type === 'income' ? '+' : transaction.type === 'transfer' ? '→' : '-'}
                   {formatCurrency(transaction.amount)}
                 </td>
                 <td className="actions-cell">

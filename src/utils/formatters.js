@@ -60,7 +60,11 @@ export const formatSubcategoryName = (name) => {
  * Format an account name for display with proper case.
  */
 export const formatAccountName = (name) => {
-  return toProperCase(name);
+  if (!name) return name;
+  console.log('formatAccountName input:', name); // Debug log
+  const result = toProperCase(name);
+  console.log('formatAccountName output:', result); // Debug log
+  return result;
 };
 
 /**

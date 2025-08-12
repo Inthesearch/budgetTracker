@@ -1,13 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.orm import Session, selectinload
 from typing import List, Optional
 from datetime import datetime, date
+import pandas as pd
+import io
+import asyncio
+from sqlalchemy import and_, func
 
 from ..database import get_db
-from ..models import User, Transaction, Category, SubCategory, Account
+from ..models import User, Transaction, Category, SubCategory, Account, TransactionType
 from ..schemas import (
     TransactionCreate, TransactionUpdate, TransactionResponse, 
-    TransactionFilter, PaginationParams, BaseResponse
+    TransactionFilter, PaginationParams, BaseResponse, DashboardStats
 )
 from ..auth import get_current_user
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,11 +28,13 @@ async def add_transaction(
     """Add a new transaction and apply its effect to the account balance."""
     # Verify account exists and belongs to user
     account = await db.execute(select(Account).where(
-        Account.id == transaction_data.account_id,
+        Account.id == transaction_data.from_account_id,
         Account.user_id == current_user.id,
         Account.is_active == True
     ))
     account = account.scalars().first()
+
+    print("transaction_data", transaction_data)
     
     if not account:
         raise HTTPException(
@@ -36,42 +42,88 @@ async def add_transaction(
             detail="Account not found"
         )
     
-    # Verify category if provided
-    if transaction_data.category_id:
-        category = await db.execute(select(Category).where(
-            Category.id == transaction_data.category_id,
-            Category.user_id == current_user.id,
-            Category.is_active == True
-        ))
-        category = category.scalars().first()
-        
-        if not category:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Category not found"
-            )
-    
-    # Verify sub-category if provided
-    if transaction_data.sub_category_id:
-        sub_category = await db.execute(select(SubCategory).where(
-            SubCategory.id == transaction_data.sub_category_id,
-            SubCategory.user_id == current_user.id,
-            SubCategory.is_active == True
-        ))
-        sub_category = sub_category.scalars().first()
-        
-        if not sub_category:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Sub-category not found"
-            )
-        
-        # Verify sub-category belongs to the specified category
-        if transaction_data.category_id and sub_category.category_id != transaction_data.category_id:
+    # Handle transfer transactions
+    if transaction_data.type == TransactionType.TRANSFER:
+        # Validate to_account_id is provided for transfers
+        if not transaction_data.to_account_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Sub-category does not belong to the specified category"
+                detail="to_account_id is required for transfer transactions"
             )
+        
+        # Verify to_account exists and belongs to user
+        to_account = await db.execute(select(Account).where(
+            Account.id == transaction_data.to_account_id,
+            Account.user_id == current_user.id,
+            Account.is_active == True
+        ))
+        to_account = to_account.scalars().first()
+        
+        if not to_account:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="To account not found"
+            )
+        
+        # Ensure from and to accounts are different
+        if transaction_data.from_account_id == transaction_data.to_account_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="From and to accounts must be different"
+            )
+        
+        # For transfers, category and sub_category should be null
+        if transaction_data.category_id or transaction_data.sub_category_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Category and sub-category should not be set for transfer transactions"
+            )
+    
+    # Handle income/expense transactions
+    else:
+        # Validate to_account_id is not provided for non-transfer transactions
+        if transaction_data.to_account_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="to_account_id should not be set for income/expense transactions"
+            )
+        
+        # Verify category if provided
+        if transaction_data.category_id:
+            category = await db.execute(select(Category).where(
+                Category.id == transaction_data.category_id,
+                Category.user_id == current_user.id,
+                Category.is_active == True
+            ))
+            category = category.scalars().first()
+            
+            if not category:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Category not found"
+                )
+        
+        # Verify sub-category if provided
+        if transaction_data.sub_category_id:
+            sub_category = await db.execute(select(SubCategory).where(
+                SubCategory.id == transaction_data.sub_category_id,
+                SubCategory.user_id == current_user.id,
+                SubCategory.is_active == True
+            ))
+            sub_category = sub_category.scalars().first()
+            
+            if not sub_category:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Sub-category not found"
+                )
+            
+            # Verify sub-category belongs to the specified category
+            if transaction_data.category_id and sub_category.category_id != transaction_data.category_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Sub-category does not belong to the specified category"
+                )
     
     # Create transaction
     db_transaction = Transaction(
@@ -81,17 +133,21 @@ async def add_transaction(
         notes=transaction_data.notes,
         category_id=transaction_data.category_id,
         sub_category_id=transaction_data.sub_category_id,
-        account_id=transaction_data.account_id,
+        from_account_id=transaction_data.from_account_id,
+        to_account_id=transaction_data.to_account_id,
         user_id=current_user.id
     )
     db.add(db_transaction)
 
     # Apply balance side-effect
-    # Note: For Option B (transfer as two transactions), we only handle income/expense here
-    if str(transaction_data.type) == "income":
+    if transaction_data.type == TransactionType.INCOME:
         account.balance = (account.balance or 0) + transaction_data.amount
-    elif str(transaction_data.type) == "expense":
+    elif transaction_data.type == TransactionType.EXPENSE:
         account.balance = (account.balance or 0) - transaction_data.amount
+    elif transaction_data.type == TransactionType.TRANSFER:
+        # For transfers, decrease from account and increase to account
+        account.balance = (account.balance or 0) - transaction_data.amount
+        to_account.balance = (to_account.balance or 0) + transaction_data.amount
 
     await db.commit()
     await db.refresh(db_transaction)
@@ -125,9 +181,9 @@ async def edit_transaction(
         )
     
     # Verify account if provided
-    if transaction_data.account_id:
+    if transaction_data.from_account_id:
         account = await db.execute(select(Account).where(
-            Account.id == transaction_data.account_id,
+            Account.id == transaction_data.from_account_id,
             Account.user_id == current_user.id,
             Account.is_active == True
         ))
@@ -178,7 +234,7 @@ async def edit_transaction(
     
     # Reverse old balance effect
     old_account = await db.execute(select(Account).where(
-        Account.id == transaction.account_id,
+        Account.id == transaction.from_account_id,
         Account.user_id == current_user.id,
         Account.is_active == True
     ))
@@ -200,7 +256,7 @@ async def edit_transaction(
     new_notes = transaction_data.notes if transaction_data.notes is not None else transaction.notes
     new_category_id = transaction_data.category_id if transaction_data.category_id is not None else transaction.category_id
     new_sub_category_id = transaction_data.sub_category_id if transaction_data.sub_category_id is not None else transaction.sub_category_id
-    new_account_id = transaction_data.account_id if transaction_data.account_id is not None else transaction.account_id
+    new_account_id = transaction_data.from_account_id if transaction_data.from_account_id is not None else transaction.from_account_id
 
     # Verify new account exists
     new_account = await db.execute(select(Account).where(
@@ -222,7 +278,7 @@ async def edit_transaction(
         notes=new_notes,
         category_id=new_category_id,
         sub_category_id=new_sub_category_id,
-        account_id=new_account_id,
+        from_account_id=new_account_id,
         user_id=current_user.id
     )
     db.add(new_transaction)
@@ -263,7 +319,7 @@ async def delete_transaction(
     
     # Reverse balance effect
     account = await db.execute(select(Account).where(
-        Account.id == transaction.account_id,
+        Account.id == transaction.from_account_id,
         Account.user_id == current_user.id,
         Account.is_active == True
     ))
@@ -291,7 +347,7 @@ async def get_transaction_record(
     transaction_type: Optional[str] = Query(None, description="Transaction type (income/expense/transfer)"),
     category_id: Optional[int] = Query(None, description="Category ID for filtering"),
     sub_category_id: Optional[int] = Query(None, description="Sub-category ID for filtering"),
-    account_id: Optional[int] = Query(None, description="Account ID for filtering"),
+    from_account_id: Optional[int] = Query(None, description="Account ID for filtering"),
     min_amount: Optional[float] = Query(None, description="Minimum amount"),
     max_amount: Optional[float] = Query(None, description="Maximum amount"),
     page: int = Query(1, ge=1, description="Page number"),
@@ -305,7 +361,8 @@ async def get_transaction_record(
         stmt = select(Transaction).options(
             selectinload(Transaction.category),
             selectinload(Transaction.sub_category),
-            selectinload(Transaction.account)
+            selectinload(Transaction.from_account),
+            selectinload(Transaction.to_account)
         ).where(
             Transaction.user_id == current_user.id,
             Transaction.is_active == True
@@ -322,8 +379,8 @@ async def get_transaction_record(
             stmt = stmt.where(Transaction.category_id == category_id)
         if sub_category_id:
             stmt = stmt.where(Transaction.sub_category_id == sub_category_id)
-        if account_id:
-            stmt = stmt.where(Transaction.account_id == account_id)
+        if from_account_id:
+            stmt = stmt.where(Transaction.from_account_id == from_account_id)
         if min_amount is not None:
             stmt = stmt.where(Transaction.amount >= min_amount)
         if max_amount is not None:
@@ -361,7 +418,8 @@ async def get_transaction_detail(
         stmt = select(Transaction).options(
             selectinload(Transaction.category),
             selectinload(Transaction.sub_category),
-            selectinload(Transaction.account)
+            selectinload(Transaction.from_account),
+            selectinload(Transaction.to_account)
         ).where(
             Transaction.id == transaction_id,
             Transaction.user_id == current_user.id,
@@ -385,4 +443,441 @@ async def get_transaction_detail(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve transaction: {str(e)}"
+        ) 
+
+@router.post("/import", response_model=BaseResponse)
+async def import_transactions(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Import transactions from CSV/Excel file."""
+    try:
+        # Validate file type
+        if not file.filename.lower().endswith(('.csv', '.xlsx', '.xls')):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only CSV and Excel files are supported"
+            )
+        
+        # Validate file size (5MB)
+        if file.size > 5 * 1024 * 1024:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File size must be less than 5MB"
+            )
+        
+        # Read file content
+        content = await file.read()
+        
+        # Parse file based on type
+        if file.filename.lower().endswith('.csv'):
+            df = pd.read_csv(io.StringIO(content.decode('utf-8')))
+        else:
+            df = pd.read_excel(io.BytesIO(content))
+        
+        # Validate required columns
+        required_columns = ['Date (dd/mm/yy)', 'Account', 'Entry Type', 'Category', 'Sub Category', 'Amount', 'To Account', 'Notes']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Missing required columns: {', '.join(missing_columns)}"
+            )
+        
+        # Initialize counters
+        imported_count = 0
+        created_accounts = 0
+        created_categories = 0
+        created_subcategories = 0
+        validation_errors = []
+        
+        # Get or create transfer category and subcategory
+        transfer_category = await db.execute(select(Category).where(
+            and_(Category.name == 'transfer', Category.user_id == current_user.id, Category.is_active == True)
+        ))
+        transfer_category = transfer_category.scalar_one_or_none()
+        
+        if not transfer_category:
+            transfer_category = Category(name='transfer', user_id=current_user.id)
+            db.add(transfer_category)
+            await db.flush()
+            created_categories += 1
+        
+        transfer_subcategory = await db.execute(select(SubCategory).where(
+            and_(SubCategory.name == 'transfer', SubCategory.category_id == transfer_category.id, SubCategory.user_id == current_user.id, SubCategory.is_active == True)
+        ))
+        transfer_subcategory = transfer_subcategory.scalar_one_or_none()
+        
+        if not transfer_subcategory:
+            transfer_subcategory = SubCategory(name='transfer', category_id=transfer_category.id, user_id=current_user.id)
+            db.add(transfer_subcategory)
+            await db.flush()
+            created_subcategories += 1
+        
+        # Process each row
+        for index, row in df.iterrows():
+            try:
+                row_num = index + 2  # +2 because index is 0-based and we have header
+                
+                # Validate entry type
+                entry_type = str(row['Entry Type']).lower().strip()
+                if entry_type not in ['income', 'expense', 'transfer']:
+                    validation_errors.append({
+                        'row': row_num,
+                        'message': f"Invalid entry type: {entry_type}. Must be 'income', 'expense', or 'transfer'"
+                    })
+                    continue
+                
+                # Validate date format
+                try:
+                    date_str = str(row['Date (dd/mm/yy)']).strip()
+                    if pd.isna(date_str) or date_str == '':
+                        validation_errors.append({
+                            'row': row_num,
+                            'message': "Date is required"
+                        })
+                        continue
+                    
+                    # Try different date formats
+                    date_obj = None
+                    for fmt in ['%d/%m/%y', '%d/%m/%Y', '%Y-%m-%d']:
+                        try:
+                            date_obj = datetime.strptime(date_str, fmt).date()
+                            break
+                        except ValueError:
+                            continue
+                    
+                    if not date_obj:
+                        validation_errors.append({
+                            'row': row_num,
+                            'message': f"Invalid date format: {date_str}. Expected dd/mm/yy"
+                        })
+                        continue
+                except Exception as e:
+                    validation_errors.append({
+                        'row': row_num,
+                        'message': f"Date parsing error: {str(e)}"
+                    })
+                    continue
+                
+                # Validate amount
+                try:
+                    amount_str = str(row['Amount']).strip()
+                    if pd.isna(amount_str) or amount_str == '':
+                        validation_errors.append({
+                            'row': row_num,
+                            'message': "Amount is required"
+                        })
+                        continue
+                    
+                    amount = float(amount_str)
+                    if amount <= 0:
+                        validation_errors.append({
+                            'row': row_num,
+                            'message': "Amount must be greater than 0"
+                        })
+                        continue
+                except ValueError:
+                    validation_errors.append({
+                        'row': row_num,
+                        'message': f"Invalid amount format: {amount_str}"
+                    })
+                    continue
+                
+                # Get or create account
+                account_name = str(row['Account']).strip().lower()
+                if not account_name:
+                    validation_errors.append({
+                        'row': row_num,
+                        'message': "Account name is required"
+                    })
+                    continue
+                
+                account = await db.execute(select(Account).where(
+                    and_(Account.name == account_name, Account.user_id == current_user.id, Account.is_active == True)
+                ))
+                account = account.scalar_one_or_none()
+                
+                if not account:
+                    account = Account(name=account_name, user_id=current_user.id, balance=0.0)
+                    db.add(account)
+                    await db.flush()
+                    created_accounts += 1
+                
+                # Handle transfer transactions
+                if entry_type == 'transfer':
+                    # Validate transfer-specific rules
+                    category_val = str(row['Category']).strip()
+                    subcategory_val = str(row['Sub Category']).strip()
+                    to_account_name = str(row['To Account']).strip()
+                    
+                    if category_val and category_val.lower() != 'nan':
+                        validation_errors.append({
+                            'row': row_num,
+                            'message': "Transfer transactions must have empty category field"
+                        })
+                        continue
+                    
+                    if subcategory_val and subcategory_val.lower() != 'nan':
+                        validation_errors.append({
+                            'row': row_num,
+                            'message': "Transfer transactions must have empty subcategory field"
+                        })
+                        continue
+                    
+                    if not to_account_name or to_account_name.lower() == 'nan':
+                        validation_errors.append({
+                            'row': row_num,
+                            'message': "Transfer transactions must specify a 'To Account'"
+                        })
+                        continue
+                    
+                    # Get or create to_account
+                    to_account = await db.execute(select(Account).where(
+                        and_(Account.name == to_account_name.lower(), Account.user_id == current_user.id, Account.is_active == True)
+                    ))
+                    to_account = to_account.scalar_one_or_none()
+                    
+                    if not to_account:
+                        to_account = Account(name=to_account_name.lower(), user_id=current_user.id, balance=0.0)
+                        db.add(to_account)
+                        await db.flush()
+                        created_accounts += 1
+                    
+                    # Create two transactions for transfer (expense from source, income to destination)
+                    
+                    # Create expense transaction from source account
+                    expense_transaction = Transaction(
+                        amount=amount,
+                        type='expense',
+                        date=date_obj,
+                        notes=f"Transfer to {to_account_name}: {str(row['Notes']).strip() if pd.notna(row['Notes']) else ''}",
+                        category_id=transfer_category.id,
+                        sub_category_id=transfer_subcategory.id,
+                        from_account_id=account.id,
+                        user_id=current_user.id
+                    )
+                    db.add(expense_transaction)
+                    
+                    # Create income transaction to destination account
+                    income_transaction = Transaction(
+                        amount=amount,
+                        type='income',
+                        date=date_obj,
+                        notes=f"Transfer from {account_name}: {str(row['Notes']).strip() if pd.notna(row['Notes']) else ''}",
+                        category_id=transfer_category.id,
+                        sub_category_id=transfer_subcategory.id,
+                        from_account_id=to_account.id,
+                        user_id=current_user.id
+                    )
+                    db.add(income_transaction)
+                    
+                    # Update account balances
+                    account.balance = (account.balance or 0) - amount
+                    to_account.balance = (to_account.balance or 0) + amount
+                    
+                    imported_count += 2  # Count as 2 transactions
+                
+                else:
+                    # Handle income/expense transactions
+                    category_name = str(row['Category']).strip()
+                    subcategory_name = str(row['Sub Category']).strip()
+                    
+                    if not category_name or category_name.lower() == 'nan':
+                        validation_errors.append({
+                            'row': row_num,
+                            'message': f"{entry_type.title()} transactions must have a category"
+                        })
+                        continue
+                    
+                    if not subcategory_name or subcategory_name.lower() == 'nan':
+                        validation_errors.append({
+                            'row': row_num,
+                            'message': f"{entry_type.title()} transactions must have a subcategory"
+                        })
+                        continue
+                    
+                    # Get or create category
+                    category = await db.execute(select(Category).where(
+                        and_(Category.name == category_name.lower(), Category.user_id == current_user.id, Category.is_active == True)
+                    ))
+                    category = category.scalar_one_or_none()
+                    
+                    if not category:
+                        category = Category(name=category_name.lower(), user_id=current_user.id)
+                        db.add(category)
+                        await db.flush()
+                        created_categories += 1
+                    
+                    # Get or create subcategory
+                    subcategory = await db.execute(select(SubCategory).where(
+                        and_(SubCategory.name == subcategory_name.lower(), SubCategory.category_id == category.id, SubCategory.user_id == current_user.id, SubCategory.is_active == True)
+                    ))
+                    subcategory = subcategory.scalar_one_or_none()
+                    
+                    if not subcategory:
+                        subcategory = SubCategory(name=subcategory_name.lower(), category_id=category.id, user_id=current_user.id)
+                        db.add(subcategory)
+                        await db.flush()
+                        created_subcategories += 1
+                    
+                    # Create transaction
+                    transaction = Transaction(
+                        amount=amount,
+                        type=entry_type,
+                        date=date_obj,
+                        notes=str(row['Notes']).strip() if pd.notna(row['Notes']) else '',
+                        category_id=category.id,
+                        sub_category_id=subcategory.id,
+                        from_account_id=account.id,
+                        user_id=current_user.id
+                    )
+                    db.add(transaction)
+                    
+                    # Update account balance
+                    if entry_type == 'income':
+                        account.balance = (account.balance or 0) + amount
+                    else:  # expense
+                        account.balance = (account.balance or 0) - amount
+                    
+                    imported_count += 1
+                
+            except Exception as e:
+                validation_errors.append({
+                    'row': row_num if 'row_num' in locals() else index + 2,
+                    'message': f"Error processing row: {str(e)}"
+                })
+                continue
+        
+        # If there are validation errors, rollback and return errors
+        if validation_errors:
+            await db.rollback()
+            return BaseResponse(
+                success=False,
+                message="Import failed due to validation errors",
+                data={
+                    'validationErrors': validation_errors,
+                    'importedCount': 0,
+                    'createdAccounts': 0,
+                    'createdCategories': 0,
+                    'createdSubcategories': 0
+                }
+            )
+        
+        # Commit all changes
+        await db.commit()
+        
+        return BaseResponse(
+            success=True,
+            message=f"Successfully imported {imported_count} transactions",
+            data={
+                'importedCount': imported_count,
+                'createdAccounts': created_accounts,
+                'createdCategories': created_categories,
+                'createdSubcategories': created_subcategories
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Import failed: {str(e)}"
+        )
+
+@router.get("/dashboard-stats", response_model=DashboardStats)
+async def get_dashboard_stats(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get dashboard statistics excluding transfer transactions."""
+    try:
+        # Get total income (excluding transfers)
+        income_result = await db.execute(
+            select(func.sum(Transaction.amount)).where(
+                Transaction.user_id == current_user.id,
+                Transaction.is_active == True,
+                Transaction.type == TransactionType.INCOME
+            )
+        )
+        total_income = income_result.scalar() or 0.0
+        
+        # Get total expense (excluding transfers)
+        expense_result = await db.execute(
+            select(func.sum(Transaction.amount)).where(
+                Transaction.user_id == current_user.id,
+                Transaction.is_active == True,
+                Transaction.type == TransactionType.EXPENSE
+            )
+        )
+        total_expense = expense_result.scalar() or 0.0
+        
+        # Calculate net balance
+        net_balance = total_income - total_expense
+        
+        # Get transaction count (excluding transfers)
+        count_result = await db.execute(
+            select(func.count(Transaction.id)).where(
+                Transaction.user_id == current_user.id,
+                Transaction.is_active == True,
+                Transaction.type.in_([TransactionType.INCOME, TransactionType.EXPENSE])
+            )
+        )
+        transaction_count = count_result.scalar() or 0
+        
+        # Get top categories (excluding transfers)
+        top_categories_result = await db.execute(
+            select(
+                Category.name,
+                func.sum(Transaction.amount).label('total_amount'),
+                func.count(Transaction.id).label('transaction_count')
+            ).join(Transaction).where(
+                Transaction.user_id == current_user.id,
+                Transaction.is_active == True,
+                Transaction.type.in_([TransactionType.INCOME, TransactionType.EXPENSE]),
+                Category.is_active == True
+            ).group_by(Category.id, Category.name).order_by(
+                func.sum(Transaction.amount).desc()
+            ).limit(5)
+        )
+        top_categories = [
+            {
+                "name": row.name,
+                "total_amount": float(row.total_amount),
+                "transaction_count": row.transaction_count
+            }
+            for row in top_categories_result.fetchall()
+        ]
+        
+        # Get recent transactions (excluding transfers)
+        recent_transactions_result = await db.execute(
+            select(Transaction).options(
+                selectinload(Transaction.category),
+                selectinload(Transaction.sub_category),
+                selectinload(Transaction.from_account),
+                selectinload(Transaction.to_account)
+            ).where(
+                Transaction.user_id == current_user.id,
+                Transaction.is_active == True,
+                Transaction.type.in_([TransactionType.INCOME, TransactionType.EXPENSE])
+            ).order_by(Transaction.date.desc()).limit(10)
+        )
+        recent_transactions = recent_transactions_result.scalars().all()
+        
+        return DashboardStats(
+            total_income=total_income,
+            total_expense=total_expense,
+            net_balance=net_balance,
+            transaction_count=transaction_count,
+            top_categories=top_categories,
+            recent_transactions=recent_transactions
+        )
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve dashboard stats: {str(e)}"
         ) 
