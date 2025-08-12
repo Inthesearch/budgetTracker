@@ -56,11 +56,10 @@ export const TransactionProvider = ({ children }) => {
         headers: getAuthHeaders(),
       });
 
-             if (response.ok) {
-         const data = await response.json();
-         console.log('data', data);
-         setTransactions(data);
-       } else if (response.status === 401) {
+                   if (response.ok) {
+        const data = await response.json();
+        setTransactions(data);
+      } else if (response.status === 401) {
         // Token expired or invalid
         console.error('Authentication failed, redirecting to login');
         localStorage.removeItem('token');
@@ -139,11 +138,9 @@ export const TransactionProvider = ({ children }) => {
         method: 'GET',
         headers: getAuthHeaders(),
       });
-      console.log('response', response);
       if (response.ok) {
         const data = await response.json();
         setAccounts(data);
-        console.log('accounts', data);
       } else if (response.status === 401) {
         console.error('Authentication failed, redirecting to login');
         localStorage.removeItem('token');
@@ -176,7 +173,7 @@ export const TransactionProvider = ({ children }) => {
           // Update account balance directly in frontend state
           setAccounts(prevAccounts => {
             return prevAccounts.map(account => {
-              if (account.id === transactionData.account_id) {
+              if (account.id === transactionData.from_account_id) {
                 let newBalance = account.balance || 0;
                 if (transactionData.type === 'income') {
                   newBalance += transactionData.amount;
@@ -303,7 +300,7 @@ export const TransactionProvider = ({ children }) => {
       if (filters.transaction_type) params.append('transaction_type', filters.transaction_type);
       if (filters.category_id) params.append('category_id', filters.category_id);
       if (filters.sub_category_id) params.append('sub_category_id', filters.sub_category_id);
-      if (filters.account_id) params.append('account_id', filters.account_id);
+      if (filters.account_id) params.append('from_account_id', filters.account_id);
       if (filters.min_amount) params.append('min_amount', filters.min_amount);
       if (filters.max_amount) params.append('max_amount', filters.max_amount);
       if (filters.page) params.append('page', filters.page);
@@ -442,7 +439,6 @@ export const TransactionProvider = ({ children }) => {
   };
 
   const updateAccount = async (id, accountData) => {
-    console.log('updateAccount', id, accountData);
     if (!user || !localStorage.getItem('token')) {
       return { success: false, error: 'Not authenticated' };
     }
@@ -507,6 +503,44 @@ export const TransactionProvider = ({ children }) => {
     }
   };
 
+  const importTransactions = async (formData, onProgress) => {
+    if (!user || !localStorage.getItem('token')) {
+      return { success: false, error: 'Not authenticated' };
+    }
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.IMPORT_TRANSACTIONS}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: formData
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          // Reload all data after successful import
+          await Promise.all([loadTransactions(), loadAccounts(), loadCategories()]);
+          return result;
+        } else {
+          return { success: false, error: result.message };
+        }
+      } else if (response.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+        return { success: false, error: 'Authentication failed' };
+      } else {
+        const error = await response.json();
+        return { success: false, error: error.detail || 'Failed to import transactions' };
+      }
+    } catch (error) {
+      console.error('Error importing transactions:', error);
+      return { success: false, error: 'Network error. Please try again.' };
+    }
+  };
+
   const value = {
     transactions,
     categories,
@@ -522,6 +556,7 @@ export const TransactionProvider = ({ children }) => {
     addAccount,
     updateAccount,
     deleteAccount,
+    importTransactions,
     loadTransactions,
     loadCategories,
     loadAccounts,

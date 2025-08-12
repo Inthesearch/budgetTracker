@@ -32,4 +32,7 @@ export const API_ENDPOINTS = {
   ADD_ACCOUNT: '/api/v1/account/addAccount',
   UPDATE_ACCOUNT: '/api/v1/account/editAccount',
   DELETE_ACCOUNT: '/api/v1/account/deleteAccount',
+  
+  // Import endpoints
+  IMPORT_TRANSACTIONS: '/api/v1/transaction/import',
 }; 

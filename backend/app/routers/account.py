@@ -157,6 +157,7 @@ async def list_accounts(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+    print("Listing accounts", current_user.id)
     """Get all active accounts for the current user."""
     accounts = await db.execute(select(Account).where(
         Account.user_id == current_user.id,

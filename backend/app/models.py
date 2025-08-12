@@ -91,7 +91,20 @@ class Account(Base):
     
     # Relationships
     user = relationship("User", back_populates="accounts")
-    transactions = relationship("Transaction", back_populates="account")
+    # Outgoing transactions (money leaving this account)
+    transactions_from = relationship(
+        "Transaction",
+        back_populates="from_account",
+        foreign_keys="[Transaction.from_account_id]"
+    )
+
+    # Incoming transactions (money going into this account)
+    transactions_to = relationship(
+        "Transaction",
+        back_populates="to_account",
+        foreign_keys="[Transaction.to_account_id]"
+    )
+
 
     def __init__(self, **kwargs):
         # Convert name to lowercase before saving
@@ -111,9 +124,10 @@ class Transaction(Base):
     
     # Foreign Keys
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
-    sub_category_id = Column(Integer, ForeignKey("sub_categories.id"), nullable=False)
-    account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)  # Nullable for transfers
+    sub_category_id = Column(Integer, ForeignKey("sub_categories.id"), nullable=True)  # Nullable for transfers
+    from_account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
+    to_account_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)  # For transfer transactions
     
     # Audit fields
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -123,7 +137,18 @@ class Transaction(Base):
     user = relationship("User", back_populates="transactions")
     category = relationship("Category", back_populates="transactions")
     sub_category = relationship("SubCategory", back_populates="transactions")
-    account = relationship("Account", back_populates="transactions")
+    from_account = relationship(
+        "Account",
+        back_populates="transactions_from",
+        foreign_keys=[from_account_id]
+    )
+
+    to_account = relationship(
+        "Account",
+        back_populates="transactions_to",
+        foreign_keys=[to_account_id]
+    )
+
 
 class PasswordReset(Base):
     __tablename__ = "password_resets"

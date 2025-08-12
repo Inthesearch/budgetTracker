@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useTransactions } from '../context/TransactionContext.jsx';
+import { formatAccountName } from '../utils/formatters.js';
 import './AccountsManagerModal.css';
 
 const AccountsManagerModal = ({ onClose }) => {
@@ -87,7 +88,7 @@ const AccountsManagerModal = ({ onClose }) => {
                   </>
                 ) : (
                   <>
-                    <div className="amm-name">{acc.name}</div>
+                    <div className="amm-name">{formatAccountName(acc.name)}</div>
                     <div className="amm-balance">{(acc.balance ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                     <button className="amm-btn" onClick={() => setEditing({ id: acc.id, name: acc.name, balance: acc.balance ?? 0 })} disabled={saving}>Edit</button>
                     <button className="amm-btn danger" onClick={() => handleDelete(acc.id)} disabled={saving}>Delete</button>

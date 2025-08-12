@@ -12,7 +12,7 @@ const BudgetGraph = () => {
     end: new Date().toLocaleDateString('en-CA')
   });
   const [selectedCategories, setSelectedCategories] = useState([]);
-  console.log('dateRange', dateRange);
+  // console.log('transactions', transactions);
 
   // Helper function to get category name with proper case
   const getCategoryName = (category) => {
@@ -80,12 +80,18 @@ const BudgetGraph = () => {
   // Filter transactions based on date range and selected categories
   const filteredTransactions = useMemo(() => {
     const filtered = transactions.filter(transaction => {
+      // Exclude transfer transactions from graphs
+      if (transaction.type === 'transfer') {
+        return false;
+      }
+      
       // Normalize dates to YYYY-MM-DD format for comparison
       const transactionDateStr = new Date(transaction.date).toISOString().split('T')[0];
       const startDateStr = dateRange.start;
       const endDateStr = dateRange.end;
       
       // Date filter - compare as strings to avoid timezone issues
+       
       if (transactionDateStr < startDateStr || transactionDateStr > endDateStr) {
         return false;
       }
@@ -100,8 +106,6 @@ const BudgetGraph = () => {
     
     return filtered;
   }, [transactions, dateRange, selectedCategories, categories]);
-
-
 
   // Calculate category totals
   const categoryData = useMemo(() => {

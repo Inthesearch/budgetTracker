@@ -21,7 +21,7 @@ const TransactionModal = ({ transaction, onClose, onSuccess }) => {
     category_id: '',
     sub_category_id: '',
     date: new Date().toLocaleDateString('en-CA'),
-    account_id: '',
+    from_account_id: '',
     type: 'expense',
     notes: ''
   });
@@ -35,42 +35,7 @@ const TransactionModal = ({ transaction, onClose, onSuccess }) => {
   const [newSubCategory, setNewSubCategory] = useState('');
   const [newAccount, setNewAccount] = useState('');
 
-  // Ensure we have a dedicated Transfer category and subcategory; returns their IDs
-  const ensureTransferCategoryAndSubcategory = async () => {
-    // Find existing transfer category (names are normalized to lowercase in backend)
-    let transferCategory = categories.find(c => {
-      const name = typeof c === 'string' ? c : c.name;
-      return name && name.toLowerCase() === 'transfer';
-    });
 
-    let transferCategoryId = transferCategory && (typeof transferCategory === 'string' ? null : transferCategory.id);
-    if (!transferCategoryId) {
-      const res = await addCategory({ name: 'transfer' });
-      if (!res.success) {
-        throw new Error(res.error || 'Failed to create Transfer category');
-      }
-      transferCategoryId = res.id;
-    }
-
-    // Find existing transfer subcategory under this category
-    let transferSubId = undefined;
-    const subs = subCategories[transferCategoryId] || [];
-    const existingSub = subs.find(s => {
-      const name = typeof s === 'string' ? s : s.name;
-      return name && name.toLowerCase() === 'transfer';
-    });
-    if (existingSub) {
-      transferSubId = typeof existingSub === 'string' ? null : existingSub.id;
-    } else {
-      const subRes = await addSubCategory({ name: 'transfer', category_id: transferCategoryId });
-      if (!subRes.success) {
-        throw new Error(subRes.error || 'Failed to create Transfer sub-category');
-      }
-      transferSubId = subRes.id;
-    }
-
-    return { categoryId: transferCategoryId, subCategoryId: transferSubId };
-  };
 
   // Helper function to get category name with proper case
   const getCategoryName = (category) => {
@@ -117,7 +82,7 @@ const TransactionModal = ({ transaction, onClose, onSuccess }) => {
         category_id: getCategoryId(transaction.category) || '',
         sub_category_id: getCategoryId(transaction.sub_category) || '',
         date: localDate,
-        account_id: getAccountId(transaction.account) || '',
+        from_account_id: getAccountId(transaction.from_account) || '',
         type: transaction.type || 'expense',
         notes: transaction.notes || ''
       });
@@ -137,8 +102,8 @@ const TransactionModal = ({ transaction, onClose, onSuccess }) => {
       newErrors.date = 'Date is required';
     }
 
-    if (!formData.account_id) {
-      newErrors.account_id = 'Account is required';
+    if (!formData.from_account_id) {
+      newErrors.from_account_id = 'Account is required';
     }
 
     if (formData.type !== 'transfer' && !formData.category_id) {
@@ -154,7 +119,7 @@ const TransactionModal = ({ transaction, onClose, onSuccess }) => {
     if (formData.type === 'transfer') {
       if (!toAccountId) {
         newErrors.to_account_id = 'To Account is required';
-      } else if (toAccountId && formData.account_id && toAccountId === formData.account_id) {
+      } else if (toAccountId && formData.from_account_id && toAccountId === formData.from_account_id) {
         newErrors.to_account_id = 'Choose a different account to transfer to';
       }
     }
@@ -201,8 +166,6 @@ const TransactionModal = ({ transaction, onClose, onSuccess }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    console.log('formData', formData);
     
     if (!validateForm()) {
       return;
@@ -214,56 +177,25 @@ const TransactionModal = ({ transaction, onClose, onSuccess }) => {
       // Convert date to local datetime format
       const dateTime = formData.date + 'T00:00:00';
 
-      if (formData.type === 'transfer') {
-        // Option B: create two transactions under the hood
-        const amount = parseFloat(formData.amount);
-        const fromAccountId = parseInt(formData.account_id);
-        const toAccId = parseInt(toAccountId);
-
-        // Resolve dedicated transfer category/subcategory
-        const { categoryId: transferCategoryId, subCategoryId: transferSubCategoryId } = await ensureTransferCategoryAndSubcategory();
-
-        const base = {
-          date: dateTime,
-          notes: formData.notes,
-          category_id: transferCategoryId,
-          sub_category_id: transferSubCategoryId,
-        };
-
-        const expenseTx = {
-          ...base,
-          amount,
-          type: 'expense',
-          account_id: fromAccountId,
-        };
-
-        const incomeTx = {
-          ...base,
-          amount,
-          type: 'income',
-          account_id: toAccId,
-        };
-
-        const res1 = await addTransaction(expenseTx);
-        if (!res1.success) throw new Error(res1.error || 'Failed to create expense transfer leg');
-
-        const res2 = await addTransaction(incomeTx);
-        if (!res2.success) throw new Error(res2.error || 'Failed to create income transfer leg');
-
-        onSuccess(isEditing ? 'Transfer updated successfully!' : 'Transfer recorded successfully!');
-        return;
-      }
-
-      // Non-transfer or editing path (backend handles edit-as-new and balances)
+      // Create transaction data
       const transactionData = {
         amount: parseFloat(formData.amount),
         date: dateTime,
         type: formData.type,
         notes: formData.notes,
-        category_id: parseInt(formData.category_id),
-        sub_category_id: parseInt(formData.sub_category_id),
-        account_id: parseInt(formData.account_id)
+        from_account_id: parseInt(formData.from_account_id)
       };
+
+      // Add category and sub_category for non-transfer transactions
+      if (formData.type !== 'transfer') {
+        transactionData.category_id = parseInt(formData.category_id);
+        transactionData.sub_category_id = parseInt(formData.sub_category_id);
+      }
+
+      // Add to_account_id for transfer transactions
+      if (formData.type === 'transfer') {
+        transactionData.to_account_id = parseInt(toAccountId);
+      }
 
       let result;
       if (isEditing) {
@@ -375,14 +307,14 @@ const TransactionModal = ({ transaction, onClose, onSuccess }) => {
             </div>
 
             <div className="form-group">
-              <label htmlFor="account_id">Account *</label>
+              <label htmlFor="from_account_id">Account *</label>
               <div className="select-with-add">
                 <select
-                  id="account_id"
-                  name="account_id"
-                  value={formData.account_id}
+                  id="from_account_id"
+                  name="from_account_id"
+                  value={formData.from_account_id}
                   onChange={handleInputChange}
-                  className={errors.account_id ? 'error' : ''}
+                  className={errors.from_account_id ? 'error' : ''}
                 >
                   <option value="">Choose Account</option>
                   {accounts.map(account => (
@@ -411,7 +343,7 @@ const TransactionModal = ({ transaction, onClose, onSuccess }) => {
                   <button type="button" onClick={() => setShowNewAccount(false)}>Cancel</button>
                 </div>
               )}
-              {errors.account_id && <span className="error-message">{errors.account_id}</span>}
+              {errors.from_account_id && <span className="error-message">{errors.from_account_id}</span>}
             </div>
           </div>
 
@@ -428,7 +360,7 @@ const TransactionModal = ({ transaction, onClose, onSuccess }) => {
                 >
                   <option value="">Choose To Account</option>
                   {accounts
-                    .filter(acc => (acc.id || acc) !== parseInt(formData.account_id || '0'))
+                    .filter(acc => (acc.id || acc) !== parseInt(formData.from_account_id || '0'))
                     .map(acc => (
                       <option key={acc.id || acc} value={acc.id || acc}>
                         {getAccountName(acc)}

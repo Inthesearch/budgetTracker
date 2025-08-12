@@ -130,7 +130,7 @@ class SubCategoryResponse(SubCategoryBase):
 class AccountBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     type: str = Field(default="bank", pattern="^(bank|credit|cash|investment)$")
-    balance: float = Field(default=0.0, ge=0)
+    balance: float = Field(default=0.0)
     currency: str = Field(default="USD", max_length=3)
 
     @validator('name')
@@ -143,7 +143,7 @@ class AccountCreate(AccountBase):
 class AccountUpdate(AccountBase):
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     type: Optional[str] = Field(None, pattern="^(bank|credit|cash|investment)$")
-    balance: Optional[float] = Field(None, ge=0)
+    balance: Optional[float] = Field(None)
     currency: Optional[str] = Field(None, max_length=3)
 
 class AccountResponse(AccountBase):
@@ -167,9 +167,10 @@ class TransactionBase(BaseModel):
     type: TransactionType
     date: datetime
     notes: Optional[str] = None
-    category_id: int
-    sub_category_id: int
-    account_id: int
+    category_id: Optional[int] = None  # Nullable for transfers
+    sub_category_id: Optional[int] = None  # Nullable for transfers
+    from_account_id: int
+    to_account_id: Optional[int] = None  # For transfer transactions
 
 class TransactionCreate(TransactionBase):
     pass
@@ -181,7 +182,8 @@ class TransactionUpdate(BaseModel):
     notes: Optional[str] = None
     category_id: Optional[int] = None
     sub_category_id: Optional[int] = None
-    account_id: Optional[int] = None
+    from_account_id: Optional[int] = None
+    to_account_id: Optional[int] = None
 
 class TransactionResponse(TransactionBase):
     id: int
@@ -193,7 +195,8 @@ class TransactionResponse(TransactionBase):
     # Include related data
     category: Optional[CategoryResponse] = None
     sub_category: Optional[SubCategoryResponse] = None
-    account: Optional[AccountResponse] = None
+    from_account: Optional[AccountResponse] = None
+    to_account: Optional[AccountResponse] = None
     
     class Config:
         from_attributes = True
@@ -205,7 +208,7 @@ class TransactionFilter(BaseModel):
     type: Optional[TransactionType] = None
     category_id: Optional[int] = None
     sub_category_id: Optional[int] = None
-    account_id: Optional[int] = None
+    from_account_id: Optional[int] = None
     min_amount: Optional[float] = None
     max_amount: Optional[float] = None
 

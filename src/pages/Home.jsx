@@ -7,6 +7,7 @@ import TransactionList from '../components/TransactionList.jsx';
 import BudgetGraph from '../components/BudgetGraph.jsx';
 import AccountsSummary from '../components/AccountsSummary.jsx';
 import AccountsManagerModal from '../components/AccountsManagerModal.jsx';
+import ImportModal from '../components/ImportModal.jsx';
 import { formatCategoryName, formatSubcategoryName, formatAccountName } from '../utils/formatters.js';
 
 import './Home.css';
@@ -20,6 +21,7 @@ const Home = () => {
   const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [showAccountsManager, setShowAccountsManager] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   // Helper function to get category name with proper case
   const getCategoryName = (category) => {
@@ -131,6 +133,12 @@ const Home = () => {
             >
               Add +
             </button>
+            <button 
+              onClick={() => setShowImportModal(true)}
+              className="import-transaction-button"
+            >
+              📥 Import
+            </button>
           </div>
 
           {/* Transaction List */}
@@ -159,6 +167,10 @@ const Home = () => {
         <div className="modal-overlay">
           <AccountsManagerModal onClose={() => setShowAccountsManager(false)} />
         </div>
+      )}
+
+      {showImportModal && (
+        <ImportModal onClose={() => setShowImportModal(false)} />
       )}
 
       {showDeleteModal && (
@@ -223,7 +235,7 @@ const Home = () => {
               )}
               <div className="info-row">
                 <span className="label">Account:</span>
-                <span>{getAccountName(selectedTransaction.account) || '-'}</span>
+                <span>{getAccountName(selectedTransaction.from_account) || '-'}</span>
               </div>
               {selectedTransaction.notes && (
                 <div className="info-row">
