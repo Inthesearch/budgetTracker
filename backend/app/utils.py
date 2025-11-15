@@ -1,60 +1,29 @@
-import re
+"""
+Utility functions for the application
+"""
+from typing import Optional
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from .models import User
+from .auth import decrypt_password
 
-def to_proper_case(text: str) -> str:
+async def get_user_decrypted_password(user_id: int, db: AsyncSession) -> Optional[str]:
     """
-    Convert a lowercase string to proper case (first letter of each word capitalized).
-    Handles common abbreviations and special cases.
-    """
-    if not text:
-        return text
+    Utility function to get a user's decrypted password.
+    Use this in your routers or other parts of the application.
     
-    # Common abbreviations that should remain uppercase
-    abbreviations = {
-        'atm', 'tv', 'pc', 'dvd', 'cd', 'usb', 'wifi', 'gps', 'covid', 'covid-19',
-        'id', 'usa', 'uk', 'eu', 'un', 'nato', 'fbi', 'cia', 'irs', 'fda', 'epa',
-        'ceo', 'cfo', 'cto', 'hr', 'it', 'qa', 'ui', 'ux', 'api', 'url', 'html',
-        'css', 'js', 'php', 'sql', 'aws', 'api', 'sdk', 'ios', 'android', 'mac',
-        'pc', 'laptop', 'smartphone', 'tablet', 'wifi', 'bluetooth', '4g', '5g'
-    }
+    Example usage in a router:
+        from app.utils import get_user_decrypted_password
+        password = await get_user_decrypted_password(user_id, db)
+    """
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalars().first()
     
-    # Split by spaces and hyphens
-    words = re.split(r'[\s\-]+', text.lower())
+    if not user:
+        return None
     
-    def capitalize_word(word):
-        if word in abbreviations:
-            return word.upper()
-        elif word.startswith('mc') and len(word) > 2:
-            # Handle names like "McDonald"
-            return word[:2] + word[2:].capitalize()
-        elif word.startswith('mac') and len(word) > 3:
-            # Handle names like "MacDonald"
-            return word[:3] + word[3:].capitalize()
-        else:
-            return word.capitalize()
-    
-    # Capitalize each word
-    proper_words = [capitalize_word(word) for word in words if word]
-    
-    # Join with spaces (preserve original spacing/hyphenation)
-    if '-' in text:
-        return '-'.join(proper_words)
-    else:
-        return ' '.join(proper_words)
-
-def format_category_name(name: str) -> str:
-    """
-    Format a category name for display with proper case.
-    """
-    return to_proper_case(name)
-
-def format_subcategory_name(name: str) -> str:
-    """
-    Format a subcategory name for display with proper case.
-    """
-    return to_proper_case(name)
-
-def format_account_name(name: str) -> str:
-    """
-    Format an account name for display with proper case.
-    """
-    return to_proper_case(name)
+    try:
+        return decrypt_password(user.hashed_password)
+    except Exception as e:
+        print(f"Error decrypting password: {e}")
+        return None

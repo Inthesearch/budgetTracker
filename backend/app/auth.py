@@ -3,49 +3,44 @@ from typing import Optional
 import sys
 import warnings
 
-# Fix for passlib/bcrypt bug detection issue on Windows
+# Fix for passlib/bcrypt bug detection issue (Windows and Linux/Production)
 # Must be done BEFORE importing passlib.context
-if sys.platform == 'win32':
-    warnings.filterwarnings('ignore', category=UserWarning, module='passlib')
-    # Import and patch bcrypt handler before it initializes
-    try:
-        import passlib.handlers.bcrypt as _bcrypt_module
-        import bcrypt as _bcrypt_lib
-        
-        # Patch the actual bcrypt.hashpw function to auto-truncate passwords > 72 bytes
-        # This will fix the bug detection issue
-        _original_hashpw = _bcrypt_lib.hashpw
-        def _safe_hashpw(password, salt):
-            # Truncate password to 72 bytes if necessary
-            if isinstance(password, bytes):
-                if len(password) > 72:
-                    password = password[:72]
-            elif isinstance(password, str):
-                password_bytes = password.encode('utf-8')
-                if len(password_bytes) > 72:
-                    password_bytes = password_bytes[:72]
-                    password = password_bytes.decode('utf-8', errors='ignore').encode('utf-8')
-                else:
-                    password = password_bytes
-            return _original_hashpw(password, salt)
-        
-        # Replace bcrypt.hashpw with our safe version
-        _bcrypt_lib.hashpw = _safe_hashpw
-        # Also patch it in the passlib module
-        _bcrypt_module._bcrypt = _bcrypt_lib
-        
-        # Patch _finalize_backend_mixin to skip bug detection
-        bcrypt_class = _bcrypt_module.bcrypt
-        if hasattr(bcrypt_class, '_finalize_backend_mixin'):
+warnings.filterwarnings('ignore', category=UserWarning, module='passlib')
+# Import and patch bcrypt handler before it initializes
+try:
+    import passlib.handlers.bcrypt as _bcrypt_module
+    import bcrypt as _bcrypt_lib
+    
+    # Patch _load_backend_mixin to handle bcrypt version detection errors
+    # This fixes: AttributeError: module 'bcrypt' has no attribute '__about__'
+    bcrypt_class = _bcrypt_module.bcrypt
+    if hasattr(bcrypt_class, '_load_backend_mixin'):
+        try:
+            # Get the original method (could be classmethod or regular method)
+            _original_load_backend = bcrypt_class._load_backend_mixin
             try:
-                _original_finalize = bcrypt_class._finalize_backend_mixin.__func__
+                _original_load_backend_func = _original_load_backend.__func__
             except AttributeError:
-                _original_finalize = bcrypt_class._finalize_backend_mixin
+                _original_load_backend_func = _original_load_backend
             
             @classmethod
-            def _safe_finalize(cls, name, dryrun=False):
+            def _safe_load_backend(cls, name, dryrun=False):
                 try:
-                    return _original_finalize(cls, name, dryrun)
+                    return _original_load_backend_func(cls, name, dryrun)
+                except AttributeError as e:
+                    # Handle missing __about__ attribute in bcrypt
+                    if '__about__' in str(e) or '__version__' in str(e):
+                        print(f"Warning: bcrypt version detection failed, using fallback: {e}")
+                        # Mark backend as loaded anyway
+                        try:
+                            if hasattr(cls, '_backend_loaded'):
+                                cls._backend_loaded = True
+                            if hasattr(cls, '_backend'):
+                                cls._backend = name
+                        except:
+                            pass
+                        return True
+                    raise
                 except ValueError as e:
                     error_str = str(e).lower()
                     if "72 bytes" in error_str or "cannot be longer than 72" in error_str:
@@ -60,24 +55,75 @@ if sys.platform == 'win32':
                         return True
                     raise
             
-            bcrypt_class._finalize_backend_mixin = _safe_finalize
+            bcrypt_class._load_backend_mixin = _safe_load_backend
+        except Exception as e:
+            print(f"Warning: Could not patch _load_backend_mixin: {e}")
+    
+    # Patch the actual bcrypt.hashpw function to auto-truncate passwords > 72 bytes
+    # This will fix the bug detection issue
+    _original_hashpw = _bcrypt_lib.hashpw
+    def _safe_hashpw(password, salt):
+        # Truncate password to 72 bytes if necessary
+        if isinstance(password, bytes):
+            if len(password) > 72:
+                password = password[:72]
+        elif isinstance(password, str):
+            password_bytes = password.encode('utf-8')
+            if len(password_bytes) > 72:
+                password_bytes = password_bytes[:72]
+                password = password_bytes.decode('utf-8', errors='ignore').encode('utf-8')
+            else:
+                password = password_bytes
+        return _original_hashpw(password, salt)
+    
+    # Replace bcrypt.hashpw with our safe version
+    _bcrypt_lib.hashpw = _safe_hashpw
+    # Also patch it in the passlib module
+    _bcrypt_module._bcrypt = _bcrypt_lib
+    
+    # Patch _finalize_backend_mixin to skip bug detection
+    if hasattr(bcrypt_class, '_finalize_backend_mixin'):
+        try:
+            _original_finalize = bcrypt_class._finalize_backend_mixin.__func__
+        except AttributeError:
+            _original_finalize = bcrypt_class._finalize_backend_mixin
         
-        # Patch detect_wrap_bug as backup
-        _original_detect = getattr(_bcrypt_module.bcrypt, 'detect_wrap_bug', None)
-        if _original_detect:
-            def _safe_detect_wrap_bug(ident):
-                try:
-                    return _original_detect(ident)
-                except ValueError as e:
-                    if "72 bytes" in str(e) or "cannot be longer than 72" in str(e):
-                        return False
-                    raise
-            _bcrypt_module.bcrypt.detect_wrap_bug = _safe_detect_wrap_bug
-            
-    except Exception as e:
-        print(f"Warning: Could not patch bcrypt: {e}")
-        import traceback
-        traceback.print_exc()
+        @classmethod
+        def _safe_finalize(cls, name, dryrun=False):
+            try:
+                return _original_finalize(cls, name, dryrun)
+            except ValueError as e:
+                error_str = str(e).lower()
+                if "72 bytes" in error_str or "cannot be longer than 72" in error_str:
+                    # Bug detection failed - mark backend as loaded anyway
+                    try:
+                        if hasattr(cls, '_backend_loaded'):
+                            cls._backend_loaded = True
+                        if hasattr(cls, '_backend'):
+                            cls._backend = name
+                    except:
+                        pass
+                    return True
+                raise
+        
+        bcrypt_class._finalize_backend_mixin = _safe_finalize
+    
+    # Patch detect_wrap_bug as backup
+    _original_detect = getattr(_bcrypt_module.bcrypt, 'detect_wrap_bug', None)
+    if _original_detect:
+        def _safe_detect_wrap_bug(ident):
+            try:
+                return _original_detect(ident)
+            except ValueError as e:
+                if "72 bytes" in str(e) or "cannot be longer than 72" in str(e):
+                    return False
+                raise
+        _bcrypt_module.bcrypt.detect_wrap_bug = _safe_detect_wrap_bug
+        
+except Exception as e:
+    print(f"Warning: Could not patch bcrypt: {e}")
+    import traceback
+    traceback.print_exc()
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -130,27 +176,77 @@ except Exception as e:
 # JWT token security
 security = HTTPBearer()
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password against its hash."""
+# WARNING: Using encryption instead of hashing for passwords is a SECURITY RISK!
+# This allows passwords to be decrypted, which is NOT recommended for production.
+# Only use this if you have a specific requirement that cannot be solved with password reset.
+
+from cryptography.fernet import Fernet
+import base64
+import hashlib
+
+# Initialize encryption key
+def _get_encryption_key() -> bytes:
+    """Get or generate encryption key for passwords."""
+    if settings.password_encryption_key:
+        # Use provided key
+        key = settings.password_encryption_key.encode()
+    else:
+        # Generate key from secret_key (not ideal, but works)
+        key = hashlib.sha256(settings.secret_key.encode()).digest()
+    
+    # Fernet requires 32-byte key, base64-encoded
+    return base64.urlsafe_b64encode(key[:32])
+
+_fernet = None
+def _get_fernet() -> Fernet:
+    """Get Fernet instance for encryption/decryption."""
+    global _fernet
+    if _fernet is None:
+        encryption_key = _get_encryption_key()
+        _fernet = Fernet(encryption_key)
+    return _fernet
+
+def encrypt_password(password: str) -> str:
+    """
+    Encrypt a password (decryptable).
+    WARNING: This is a security risk! Passwords should be hashed, not encrypted.
+    """
     try:
-        # Truncate password to 72 bytes if necessary (bcrypt limitation)
-        password_bytes = plain_password.encode('utf-8')
-        if len(password_bytes) > 72:
-            password_bytes = password_bytes[:72]
-            plain_password = password_bytes.decode('utf-8', errors='ignore')
-        return pwd_context.verify(plain_password, hashed_password)
+        fernet = _get_fernet()
+        encrypted = fernet.encrypt(password.encode('utf-8'))
+        return encrypted.decode('utf-8')
+    except Exception as e:
+        print(f"Password encryption error: {e}")
+        raise
+
+def decrypt_password(encrypted_password: str) -> str:
+    """
+    Decrypt a password.
+    WARNING: This is only possible because we're using encryption instead of hashing.
+    """
+    try:
+        fernet = _get_fernet()
+        decrypted = fernet.decrypt(encrypted_password.encode('utf-8'))
+        return decrypted.decode('utf-8')
+    except Exception as e:
+        print(f"Password decryption error: {e}")
+        raise
+
+def verify_password(plain_password: str, encrypted_password: str) -> bool:
+    """Verify a password by decrypting and comparing."""
+    try:
+        decrypted = decrypt_password(encrypted_password)
+        return decrypted == plain_password
     except Exception as e:
         print(f"Password verification error: {e}")
         return False
 
 def get_password_hash(password: str) -> str:
-    """Hash a password."""
-    # Truncate password to 72 bytes if necessary (bcrypt limitation)
-    password_bytes = password.encode('utf-8')
-    if len(password_bytes) > 72:
-        password_bytes = password_bytes[:72]
-        password = password_bytes.decode('utf-8', errors='ignore')
-    return pwd_context.hash(password)
+    """
+    Encrypt a password (stored as "hash" but actually encrypted).
+    WARNING: This uses encryption, not hashing. Passwords can be decrypted!
+    """
+    return encrypt_password(password)
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """Create a JWT access token."""
