@@ -224,18 +224,46 @@ def decrypt_password(encrypted_password: str) -> str:
     Decrypt a password.
     WARNING: This is only possible because we're using encryption instead of hashing.
     """
+    if not encrypted_password or not encrypted_password.strip():
+        raise ValueError("Encrypted password cannot be empty")
+    
+    # Check if it looks like a bcrypt hash (starts with $2a$, $2b$, or $2y$)
+    if encrypted_password.startswith('$2'):
+        raise ValueError("This is a bcrypt hash (old system), not an encrypted password. Bcrypt hashes cannot be decrypted - they are one-way hashes. Only passwords encrypted with Fernet (new system) can be decrypted. To decrypt, you need to use a password that was encrypted with the /encrypt endpoint.")
+    
     try:
         fernet = _get_fernet()
         decrypted = fernet.decrypt(encrypted_password.encode('utf-8'))
         return decrypted.decode('utf-8')
     except Exception as e:
-        print(f"Password decryption error: {e}")
-        raise
+        error_msg = str(e) if str(e) else f"{type(e).__name__}"
+        error_type = type(e).__name__
+        print(f"Password decryption error: {error_type} - {error_msg}")
+        # Provide more helpful error message
+        if "InvalidToken" in error_type or "Invalid" in error_msg:
+            raise ValueError(f"Invalid encrypted password format. The password may be corrupted, encrypted with a different key, or not a valid Fernet token. Error: {error_msg}")
+        raise ValueError(f"Decryption failed ({error_type}): {error_msg}")
 
-def verify_password(plain_password: str, encrypted_password: str) -> bool:
-    """Verify a password by decrypting and comparing."""
+def verify_password(plain_password: str, stored_password: str) -> bool:
+    """
+    Verify a password against stored password.
+    Handles both bcrypt hashes (old system) and Fernet encrypted passwords (new system).
+    """
+    if not stored_password or not plain_password:
+        return False
+    
+    # Check if it's a bcrypt hash (old system - starts with $2a$, $2b$, or $2y$)
+    if stored_password.startswith('$2'):
+        # Use bcrypt verification for old passwords
+        try:
+            return pwd_context.verify(plain_password, stored_password)
+        except Exception as e:
+            print(f"Bcrypt password verification error: {e}")
+            return False
+    
+    # Otherwise, it's a Fernet encrypted password (new system)
     try:
-        decrypted = decrypt_password(encrypted_password)
+        decrypted = decrypt_password(stored_password)
         return decrypted == plain_password
     except Exception as e:
         print(f"Password verification error: {e}")
