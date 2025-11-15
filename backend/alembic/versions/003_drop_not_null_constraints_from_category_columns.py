@@ -7,6 +7,7 @@ Create Date: 2024-01-01 00:00:00.000000
 """
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy import inspect
 
 # revision identifiers, used by Alembic.
 revision = '003'
@@ -18,8 +19,16 @@ depends_on = None
 def upgrade():
     # Drop NOT NULL constraints from category_id and sub_category_id
     # This allows transfer transactions to have NULL categories
-    op.alter_column('transactions', 'category_id', nullable=True)
-    op.alter_column('transactions', 'sub_category_id', nullable=True)
+    # Check if columns are already nullable (might be in initial schema)
+    connection = op.get_bind()
+    inspector = inspect(connection)
+    columns = {col['name']: col for col in inspector.get_columns('transactions')}
+    
+    if 'category_id' in columns and not columns['category_id']['nullable']:
+        op.alter_column('transactions', 'category_id', nullable=True)
+    
+    if 'sub_category_id' in columns and not columns['sub_category_id']['nullable']:
+        op.alter_column('transactions', 'sub_category_id', nullable=True)
 
 
 def downgrade():

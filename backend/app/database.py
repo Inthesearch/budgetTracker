@@ -2,18 +2,19 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.pool import NullPool
 from .config import settings
 import asyncio
 from urllib.parse import urlparse, parse_qs, urlencode
 
 def clean_database_url(url: str) -> str:
-    """Clean database URL by removing unsupported parameters for asyncpg."""
+    """Clean database URL by removing unsupported parameters for psycopg."""
     if url.startswith("postgresql://"):
         # Parse the URL
         parsed = urlparse(url)
         query_params = parse_qs(parsed.query)
         
-        # Remove unsupported parameters for asyncpg and psycopg2
+        # Remove unsupported parameters for psycopg
         unsupported_params = [
             'sslmode', 'sslcert', 'sslkey', 'sslrootcert', 'channel_binding',
             'connect_timeout', 'application_name', 'client_encoding', 'timezone',
@@ -40,25 +41,25 @@ def clean_database_url(url: str) -> str:
 if settings.database_url.startswith("postgresql"):
     try:
         print("=== Starting PostgreSQL connection setup ===")
-        # Clean the URL for pg8000
+        # Clean the URL
         clean_sync_url = clean_database_url(settings.database_url)
         
         print(f"Original database URL: {settings.database_url}")
         print(f"Clean sync URL: {clean_sync_url}")
         
-        # Create asyncpg URLs
-        asyncpg_url = clean_sync_url.replace("postgresql://", "postgresql+asyncpg://")
-        print(f"Async database URL: {asyncpg_url}")
+        # Create psycopg async URL (psycopg3 supports async natively)
+        psycopg_url = clean_sync_url.replace("postgresql://", "postgresql+psycopg://")
+        print(f"Async database URL: {psycopg_url}")
         
-        print("Creating async engine with asyncpg...")
-        # Create async engine using asyncpg
+        print("Creating async engine with psycopg...")
+        # Create async engine using psycopg (psycopg3)
         engine = create_async_engine(
-            asyncpg_url, 
+            psycopg_url, 
             echo=settings.debug,
             pool_pre_ping=True,
             pool_recycle=300
         )
-        print("Async engine created successfully with asyncpg")
+        print("Async engine created successfully with psycopg")
         
         AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
         
@@ -76,13 +77,25 @@ if settings.database_url.startswith("postgresql"):
         # Fallback to SQLite - use async engine
         fallback_url = "sqlite+aiosqlite:///./budget_tracker.db"
         print(f"Fallback URL: {fallback_url}")
-        engine = create_async_engine(fallback_url, echo=settings.debug)
+        engine = create_async_engine(
+            fallback_url, 
+            echo=settings.debug,
+            poolclass=NullPool,
+            pool_pre_ping=False,
+            connect_args={"check_same_thread": False}
+        )
         AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
         settings.database_url = fallback_url
 else:
     # For SQLite (development) - use async engine
     async_url = settings.database_url.replace("sqlite://", "sqlite+aiosqlite://")
-    engine = create_async_engine(async_url, echo=settings.debug)
+    engine = create_async_engine(
+        async_url, 
+        echo=settings.debug,
+        poolclass=NullPool,
+        pool_pre_ping=False,
+        connect_args={"check_same_thread": False}
+    )
     AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 Base = declarative_base()
