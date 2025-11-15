@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, ForeignKey, Text, Enum
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, ForeignKey, Text, Enum, TypeDecorator
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from sqlalchemy.ext.declarative import declarative_base
@@ -9,6 +9,43 @@ class TransactionType(str, enum.Enum):
     INCOME = "income"
     EXPENSE = "expense"
     TRANSFER = "transfer"
+
+class TransactionTypeEnum(TypeDecorator):
+    """Custom type decorator to ensure enum values (lowercase strings) are used with PostgreSQL enum"""
+    impl = String(20)  # Use String as base, but cast to enum in PostgreSQL
+    cache_ok = True
+    
+    def load_dialect_impl(self, dialect):
+        """Use PostgreSQL native enum type if available"""
+        if dialect.name == 'postgresql':
+            # For PostgreSQL, we need to use the enum type but ensure values are used
+            # We'll use a String and cast it in process_bind_param
+            from sqlalchemy.dialects.postgresql import ENUM as PG_ENUM
+            return dialect.type_descriptor(PG_ENUM('income', 'expense', 'transfer', name='transactiontype'))
+        return dialect.type_descriptor(String(20))
+    
+    def process_bind_param(self, value, dialect):
+        """Convert enum to lowercase string value before binding to database"""
+        if value is None:
+            return None
+        # Always return the lowercase string value
+        if isinstance(value, TransactionType):
+            return value.value  # Return lowercase string: "income", "expense", "transfer"
+        if isinstance(value, str):
+            return value.lower()  # Ensure lowercase
+        return str(value).lower() if value else None
+    
+    def process_result_value(self, value, dialect):
+        """Convert database value back to enum"""
+        if value is None:
+            return None
+        if isinstance(value, str):
+            # Try to match the value to an enum member
+            value_lower = value.lower()
+            for member in TransactionType:
+                if member.value == value_lower:
+                    return member
+        return value
 
 class User(Base):
     __tablename__ = "users"
@@ -117,7 +154,7 @@ class Transaction(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     amount = Column(Float, nullable=False)
-    type = Column(Enum(TransactionType), nullable=False)
+    type = Column(TransactionTypeEnum(), nullable=False)
     date = Column(DateTime(timezone=True), nullable=False)
     notes = Column(Text)
     is_active = Column(Boolean, default=True)

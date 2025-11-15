@@ -53,11 +53,19 @@ if settings.database_url.startswith("postgresql"):
         
         print("Creating async engine with psycopg...")
         # Create async engine using psycopg (psycopg3)
+        # Configure to avoid parameter binding issues with explicit type casts
         engine = create_async_engine(
             psycopg_url, 
             echo=settings.debug,
             pool_pre_ping=True,
-            pool_recycle=300
+            pool_recycle=300,
+            # Use implicit_returning=True and configure for better psycopg3 compatibility
+            implicit_returning=True,
+            # Configure connect_args for psycopg3
+            connect_args={
+                # psycopg3-specific: use client-side parameter binding
+                "prepare_threshold": 0,  # Disable prepared statements to avoid portal issues
+            }
         )
         print("Async engine created successfully with psycopg")
         

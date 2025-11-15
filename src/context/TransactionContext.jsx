@@ -170,20 +170,38 @@ export const TransactionProvider = ({ children }) => {
       if (response.ok) {
         const result = await response.json();
         if (result.success) {
-          // Update account balance directly in frontend state
+          // Update account balances using the response data from backend
+          // This ensures we use the actual updated balances, especially for transfers
           setAccounts(prevAccounts => {
-            return prevAccounts.map(account => {
-              if (account.id === transactionData.from_account_id) {
-                let newBalance = account.balance || 0;
-                if (transactionData.type === 'income') {
-                  newBalance += transactionData.amount;
-                } else if (transactionData.type === 'expense') {
-                  newBalance -= transactionData.amount;
-                }
-                return { ...account, balance: newBalance };
+            const updatedAccounts = [...prevAccounts];
+            
+            // Update from_account balance from response
+            if (result.data.from_account) {
+              const fromAccountIndex = updatedAccounts.findIndex(
+                acc => acc.id === result.data.from_account.id
+              );
+              if (fromAccountIndex !== -1) {
+                updatedAccounts[fromAccountIndex] = {
+                  ...updatedAccounts[fromAccountIndex],
+                  balance: result.data.from_account.balance
+                };
               }
-              return account;
-            });
+            }
+            
+            // Update to_account balance for transfer transactions
+            if (transactionData.type === 'transfer' && result.data.to_account) {
+              const toAccountIndex = updatedAccounts.findIndex(
+                acc => acc.id === result.data.to_account.id
+              );
+              if (toAccountIndex !== -1) {
+                updatedAccounts[toAccountIndex] = {
+                  ...updatedAccounts[toAccountIndex],
+                  balance: result.data.to_account.balance
+                };
+              }
+            }
+            
+            return updatedAccounts;
           });
           
           // Reload transactions
