@@ -30,7 +30,11 @@ target_metadata = Base.metadata
 # ... etc.
 
 def get_url():
-    return settings.database_url
+    # Convert postgresql:// to postgresql+psycopg:// for psycopg3 (works for both sync and async)
+    url = settings.database_url
+    if url.startswith("postgresql://") and "+psycopg" not in url:
+        url = url.replace("postgresql://", "postgresql+psycopg://")
+    return url
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.

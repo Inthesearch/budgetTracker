@@ -1,5 +1,84 @@
 from datetime import datetime, timedelta
 from typing import Optional
+import sys
+import warnings
+
+# Fix for passlib/bcrypt bug detection issue on Windows
+# Must be done BEFORE importing passlib.context
+if sys.platform == 'win32':
+    warnings.filterwarnings('ignore', category=UserWarning, module='passlib')
+    # Import and patch bcrypt handler before it initializes
+    try:
+        import passlib.handlers.bcrypt as _bcrypt_module
+        import bcrypt as _bcrypt_lib
+        
+        # Patch the actual bcrypt.hashpw function to auto-truncate passwords > 72 bytes
+        # This will fix the bug detection issue
+        _original_hashpw = _bcrypt_lib.hashpw
+        def _safe_hashpw(password, salt):
+            # Truncate password to 72 bytes if necessary
+            if isinstance(password, bytes):
+                if len(password) > 72:
+                    password = password[:72]
+            elif isinstance(password, str):
+                password_bytes = password.encode('utf-8')
+                if len(password_bytes) > 72:
+                    password_bytes = password_bytes[:72]
+                    password = password_bytes.decode('utf-8', errors='ignore').encode('utf-8')
+                else:
+                    password = password_bytes
+            return _original_hashpw(password, salt)
+        
+        # Replace bcrypt.hashpw with our safe version
+        _bcrypt_lib.hashpw = _safe_hashpw
+        # Also patch it in the passlib module
+        _bcrypt_module._bcrypt = _bcrypt_lib
+        
+        # Patch _finalize_backend_mixin to skip bug detection
+        bcrypt_class = _bcrypt_module.bcrypt
+        if hasattr(bcrypt_class, '_finalize_backend_mixin'):
+            try:
+                _original_finalize = bcrypt_class._finalize_backend_mixin.__func__
+            except AttributeError:
+                _original_finalize = bcrypt_class._finalize_backend_mixin
+            
+            @classmethod
+            def _safe_finalize(cls, name, dryrun=False):
+                try:
+                    return _original_finalize(cls, name, dryrun)
+                except ValueError as e:
+                    error_str = str(e).lower()
+                    if "72 bytes" in error_str or "cannot be longer than 72" in error_str:
+                        # Bug detection failed - mark backend as loaded anyway
+                        try:
+                            if hasattr(cls, '_backend_loaded'):
+                                cls._backend_loaded = True
+                            if hasattr(cls, '_backend'):
+                                cls._backend = name
+                        except:
+                            pass
+                        return True
+                    raise
+            
+            bcrypt_class._finalize_backend_mixin = _safe_finalize
+        
+        # Patch detect_wrap_bug as backup
+        _original_detect = getattr(_bcrypt_module.bcrypt, 'detect_wrap_bug', None)
+        if _original_detect:
+            def _safe_detect_wrap_bug(ident):
+                try:
+                    return _original_detect(ident)
+                except ValueError as e:
+                    if "72 bytes" in str(e) or "cannot be longer than 72" in str(e):
+                        return False
+                    raise
+            _bcrypt_module.bcrypt.detect_wrap_bug = _safe_detect_wrap_bug
+            
+    except Exception as e:
+        print(f"Warning: Could not patch bcrypt: {e}")
+        import traceback
+        traceback.print_exc()
+
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
@@ -12,21 +91,65 @@ from .schemas import TokenData
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Create password context (bug detection should be patched by now)
+# Pre-initialize the backend to avoid lazy initialization errors
+try:
+    # Force backend initialization now (before first use) to catch errors early
+    from passlib.handlers.bcrypt import bcrypt
+    # Try to set backend explicitly - our patches should catch the error
+    try:
+        bcrypt.set_backend("bcrypt")
+    except ValueError as e:
+        if "72 bytes" in str(e) or "cannot be longer than 72" in str(e):
+            # Bug detection failed - mark backend as loaded manually
+            print(f"Warning: bcrypt bug detection failed, marking backend as loaded: {e}")
+            # Manually mark backend as loaded to skip bug detection
+            if hasattr(bcrypt, '_backend'):
+                bcrypt._backend = 'bcrypt'
+            if hasattr(bcrypt, '_backend_loaded'):
+                bcrypt._backend_loaded = True
+        else:
+            raise
+except Exception as e:
+    print(f"Warning: Error pre-initializing bcrypt backend: {e}")
+
+# Now create the context
+try:
+    pwd_context = CryptContext(
+        schemes=["bcrypt"],
+        deprecated="auto",
+    )
+except Exception as e:
+    print(f"Warning: Error creating password context: {e}")
+    # Fallback: create context anyway
+    pwd_context = CryptContext(
+        schemes=["bcrypt"],
+        deprecated="auto",
+    )
 
 # JWT token security
 security = HTTPBearer()
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash."""
-    # return plain_password == hashed_password
-    print(f"plain_pasword {pwd_context.hash(plain_password)}")
-    print(f"hashed_password {hashed_password}")
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        # Truncate password to 72 bytes if necessary (bcrypt limitation)
+        password_bytes = plain_password.encode('utf-8')
+        if len(password_bytes) > 72:
+            password_bytes = password_bytes[:72]
+            plain_password = password_bytes.decode('utf-8', errors='ignore')
+        return pwd_context.verify(plain_password, hashed_password)
+    except Exception as e:
+        print(f"Password verification error: {e}")
+        return False
 
 def get_password_hash(password: str) -> str:
     """Hash a password."""
+    # Truncate password to 72 bytes if necessary (bcrypt limitation)
+    password_bytes = password.encode('utf-8')
+    if len(password_bytes) > 72:
+        password_bytes = password_bytes[:72]
+        password = password_bytes.decode('utf-8', errors='ignore')
     return pwd_context.hash(password)
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
