@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.future import select
@@ -15,7 +14,8 @@ from ..schemas import (
     UserCreate, UserLogin, UserResponse, Token, 
     PasswordResetRequest, PasswordResetConfirm, BaseResponse
 )
-from ..auth import get_password_hash, authenticate_user, create_access_token, get_current_user
+from pydantic import BaseModel
+from ..auth import get_password_hash, authenticate_user, create_access_token, get_current_user, decrypt_password
 from ..config import settings
 
 router = APIRouter(tags=["Authentication"])
@@ -96,9 +96,12 @@ async def login(user_credentials: UserLogin, db: AsyncSession = Depends(get_db))
     )
 
 @router.post("/forgotPass", response_model=BaseResponse)
-async def forgot_password(request: PasswordResetRequest, db: Session = Depends(get_db)):
+async def forgot_password(request: PasswordResetRequest, db: AsyncSession = Depends(get_db)):
     """Send password reset email."""
-    user = db.query(User).filter(User.email == request.email).first()
+    # Use async query
+    result = await db.execute(select(User).where(User.email == request.email))
+    user = result.scalars().first()
+    
     if not user:
         # Don't reveal if email exists or not for security
         return BaseResponse(
@@ -117,7 +120,7 @@ async def forgot_password(request: PasswordResetRequest, db: Session = Depends(g
         expires_at=expires_at
     )
     db.add(reset_record)
-    db.commit()
+    await db.commit()
     
     # Send email (if SMTP is configured)
     if settings.smtp_username and settings.smtp_password:
@@ -159,14 +162,15 @@ async def forgot_password(request: PasswordResetRequest, db: Session = Depends(g
     )
 
 @router.post("/reset-password", response_model=BaseResponse)
-async def reset_password(reset_data: PasswordResetConfirm, db: Session = Depends(get_db)):
+async def reset_password(reset_data: PasswordResetConfirm, db: AsyncSession = Depends(get_db)):
     """Reset password using token."""
-    # Find valid reset record
-    reset_record = db.query(PasswordReset).filter(
+    # Find valid reset record using async query
+    result = await db.execute(select(PasswordReset).where(
         PasswordReset.token == reset_data.token,
         PasswordReset.is_used == False,
         PasswordReset.expires_at > datetime.utcnow()
-    ).first()
+    ))
+    reset_record = result.scalars().first()
     
     if not reset_record:
         raise HTTPException(
@@ -174,8 +178,10 @@ async def reset_password(reset_data: PasswordResetConfirm, db: Session = Depends
             detail="Invalid or expired reset token"
         )
     
-    # Find user
-    user = db.query(User).filter(User.email == reset_record.email).first()
+    # Find user using async query
+    user_result = await db.execute(select(User).where(User.email == reset_record.email))
+    user = user_result.scalars().first()
+    
     if not user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -186,7 +192,7 @@ async def reset_password(reset_data: PasswordResetConfirm, db: Session = Depends
     user.hashed_password = get_password_hash(reset_data.new_password)
     reset_record.is_used = True
     
-    db.commit()
+    await db.commit()
     
     return BaseResponse(
         success=True,
@@ -196,4 +202,104 @@ async def reset_password(reset_data: PasswordResetConfirm, db: Session = Depends
 @router.get("/me", response_model=UserResponse)
 async def get_current_user_info(current_user: User = Depends(get_current_user)):
     """Get current user information."""
-    return current_user 
+    return current_user
+
+@router.post("/decrypt-password", response_model=BaseResponse)
+async def decrypt_user_password(
+    user_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Decrypt a user's password.
+    WARNING: This is a security risk! Only use for administrative purposes.
+    Requires authentication and only allows decrypting your own password or admin access.
+    """
+    # Only allow users to decrypt their own password, or implement admin check here
+    if current_user.id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only decrypt your own password"
+        )
+    
+    # Get user from database
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalars().first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    try:
+        decrypted_password = decrypt_password(user.hashed_password)
+        return BaseResponse(
+            success=True,
+            message="Password decrypted successfully",
+            data={"password": decrypted_password}
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to decrypt password: {str(e)}"
+        )
+
+class DecryptPasswordRequest(BaseModel):
+    encrypted_password: str
+
+@router.post("/decrypt-password-string", response_model=BaseResponse)
+async def decrypt_password_string(
+    request: DecryptPasswordRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Decrypt a password string directly.
+    Pass the encrypted password string and get the decrypted password back.
+    
+    WARNING: This is a security risk! Only use for administrative purposes.
+    Requires authentication.
+    
+    Example request body:
+    {
+        "encrypted_password": "gAAAAABl..."
+    }
+    """
+    try:
+        decrypted = decrypt_password(request.encrypted_password)
+        return BaseResponse(
+            success=True,
+            message="Password decrypted successfully",
+            data={"password": decrypted}
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to decrypt password: {str(e)}"
+        )
+
+@router.post("/decrypt", response_model=BaseResponse)
+async def decrypt_password_simple(request: DecryptPasswordRequest):
+    """
+    Simple password decryption endpoint - no authentication required.
+    Just pass the encrypted password string and get the decrypted password.
+    
+    WARNING: This is a security risk! Use only for testing/development.
+    
+    Example:
+    {
+        "encrypted_password": "gAAAAABl..."
+    }
+    """
+    try:
+        decrypted = decrypt_password(request.encrypted_password)
+        return BaseResponse(
+            success=True,
+            message="Password decrypted successfully",
+            data={"password": decrypted}
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to decrypt password: {str(e)}"
+        ) 
