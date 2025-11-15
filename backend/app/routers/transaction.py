@@ -126,9 +126,10 @@ async def add_transaction(
                 )
     
     # Create transaction
+    # The TransactionTypeEnum TypeDecorator will automatically convert enum to lowercase value
     db_transaction = Transaction(
         amount=transaction_data.amount,
-        type=transaction_data.type,
+        type=transaction_data.type,  # TypeDecorator handles conversion to lowercase
         date=transaction_data.date,
         notes=transaction_data.notes,
         category_id=transaction_data.category_id,
@@ -152,10 +153,44 @@ async def add_transaction(
     await db.commit()
     await db.refresh(db_transaction)
     
+    # Refresh accounts to get updated balances
+    await db.refresh(account)
+    if transaction_data.type == TransactionType.TRANSFER:
+        await db.refresh(to_account)
+    
+    # Calculate total available funds (sum of all account balances)
+    all_accounts_result = await db.execute(
+        select(Account).where(
+            Account.user_id == current_user.id,
+            Account.is_active == True
+        )
+    )
+    all_accounts = all_accounts_result.scalars().all()
+    total_available_funds = sum(acc.balance or 0 for acc in all_accounts)
+    
+    # Prepare response data with updated balances
+    response_data = {
+        "transaction_id": db_transaction.id,
+        "from_account": {
+            "id": account.id,
+            "name": account.name,
+            "balance": account.balance
+        },
+        "total_available_funds": total_available_funds
+    }
+    
+    # Include to_account for transfers
+    if transaction_data.type == TransactionType.TRANSFER:
+        response_data["to_account"] = {
+            "id": to_account.id,
+            "name": to_account.name,
+            "balance": to_account.balance
+        }
+    
     return BaseResponse(
         success=True,
         message="Transaction added successfully",
-        data={"transaction_id": db_transaction.id}
+        data=response_data
     )
 
 @router.put("/editTransaction/{transaction_id}", response_model=BaseResponse)

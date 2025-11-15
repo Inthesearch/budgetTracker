@@ -171,6 +171,15 @@ class TransactionBase(BaseModel):
     sub_category_id: Optional[int] = None  # Nullable for transfers
     from_account_id: int
     to_account_id: Optional[int] = None  # For transfer transactions
+    
+    @validator('type', pre=True)
+    def ensure_lowercase_enum_value(cls, v):
+        """Ensure enum value is lowercase string for database compatibility"""
+        if isinstance(v, TransactionType):
+            return v.value  # Return lowercase string value ("income", "expense", "transfer")
+        if isinstance(v, str):
+            return v.lower()  # Convert to lowercase if it's already a string
+        return v
 
 class TransactionCreate(TransactionBase):
     pass
