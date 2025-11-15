@@ -15,7 +15,7 @@ from ..schemas import (
     PasswordResetRequest, PasswordResetConfirm, BaseResponse
 )
 from pydantic import BaseModel
-from ..auth import get_password_hash, authenticate_user, create_access_token, get_current_user, decrypt_password
+from ..auth import get_password_hash, authenticate_user, create_access_token, get_current_user, decrypt_password, encrypt_password
 from ..config import settings
 
 router = APIRouter(tags=["Authentication"])
@@ -248,6 +248,9 @@ async def decrypt_user_password(
 class DecryptPasswordRequest(BaseModel):
     encrypted_password: str
 
+class EncryptPasswordRequest(BaseModel):
+    password: str
+
 @router.post("/decrypt-password-string", response_model=BaseResponse)
 async def decrypt_password_string(
     request: DecryptPasswordRequest,
@@ -291,6 +294,12 @@ async def decrypt_password_simple(request: DecryptPasswordRequest):
         "encrypted_password": "gAAAAABl..."
     }
     """
+    if not request.encrypted_password or not request.encrypted_password.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="encrypted_password is required and cannot be empty"
+        )
+    
     try:
         decrypted = decrypt_password(request.encrypted_password)
         return BaseResponse(
@@ -298,8 +307,44 @@ async def decrypt_password_simple(request: DecryptPasswordRequest):
             message="Password decrypted successfully",
             data={"password": decrypted}
         )
+    except ValueError as e:
+        # Invalid token/format error
+        error_msg = str(e) if str(e) else "Invalid encrypted password format"
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to decrypt password: {error_msg}. Make sure the encrypted password is valid and was encrypted with the same key."
+        )
+    except Exception as e:
+        # Any other error
+        error_msg = str(e) if str(e) else "Unknown error occurred"
+        error_type = type(e).__name__
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to decrypt password: {error_type} - {error_msg}. The encrypted password may be invalid, corrupted, or encrypted with a different key."
+        )
+
+@router.post("/encrypt", response_model=BaseResponse)
+async def encrypt_password_simple(request: EncryptPasswordRequest):
+    """
+    Simple password encryption endpoint - no authentication required.
+    Just pass the plain password string and get the encrypted password.
+    
+    WARNING: This is a security risk! Use only for testing/development.
+    
+    Example:
+    {
+        "password": "MyPassword123"
+    }
+    """
+    try:
+        encrypted = encrypt_password(request.password)
+        return BaseResponse(
+            success=True,
+            message="Password encrypted successfully",
+            data={"encrypted_password": encrypted}
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to decrypt password: {str(e)}"
+            detail=f"Failed to encrypt password: {str(e)}"
         ) 
