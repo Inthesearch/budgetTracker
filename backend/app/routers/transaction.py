@@ -5,7 +5,7 @@ from datetime import datetime, date
 import pandas as pd
 import io
 import asyncio
-from sqlalchemy import and_, func
+from sqlalchemy import and_, func, cast, String
 
 from ..database import get_db
 from ..models import User, Transaction, Category, SubCategory, Account, TransactionType
@@ -484,7 +484,8 @@ async def get_transaction_record(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Invalid transaction_type. Use income|expense|transfer"
                 )
-            stmt = stmt.where(Transaction.type == mapping[t])
+            # Compare case-insensitively by casting enum to text then lowering
+            stmt = stmt.where(func.lower(cast(Transaction.type, String)) == t)
         if category_id:
             stmt = stmt.where(Transaction.category_id == category_id)
         if sub_category_id:
