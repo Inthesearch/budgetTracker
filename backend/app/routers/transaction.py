@@ -449,7 +449,7 @@ async def get_transaction_record(
     min_amount: Optional[float] = Query(None, description="Minimum amount"),
     max_amount: Optional[float] = Query(None, description="Maximum amount"),
     page: int = Query(1, ge=1, description="Page number"),
-    size: int = Query(None, ge=1, description="Page size"),
+    size: int = Query(None, ge=1, description="Page size (max 15; defaults to 15 if not provided)"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -479,6 +479,7 @@ async def get_transaction_record(
                 "expense": TransactionType.EXPENSE,
                 "transfer": TransactionType.TRANSFER,
             }
+            print(f"t: {t}")
             if t not in mapping:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -500,10 +501,10 @@ async def get_transaction_record(
         # Order by date descending (newest first)
         stmt = stmt.order_by(Transaction.date.desc())
         
-        # Apply pagination
-        if size:
-            offset = (page - 1) * size
-            stmt = stmt.offset(offset).limit(size)
+        # Apply pagination with a hard cap of 15 items
+        effective_size = 15 if size is None else min(size, 15)
+        offset = (page - 1) * effective_size
+        stmt = stmt.offset(offset).limit(effective_size)
         
         # Execute query
         result = await db.execute(stmt)
