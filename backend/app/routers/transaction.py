@@ -472,7 +472,19 @@ async def get_transaction_record(
         if end_date:
             stmt = stmt.where(Transaction.date <= end_date)
         if transaction_type:
-            stmt = stmt.where(Transaction.type == transaction_type)
+            # Normalize type to enum (DB uses lowercase enum values)
+            t = (transaction_type or "").strip().lower()
+            mapping = {
+                "income": TransactionType.INCOME,
+                "expense": TransactionType.EXPENSE,
+                "transfer": TransactionType.TRANSFER,
+            }
+            if t not in mapping:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid transaction_type. Use income|expense|transfer"
+                )
+            stmt = stmt.where(Transaction.type == mapping[t])
         if category_id:
             stmt = stmt.where(Transaction.category_id == category_id)
         if sub_category_id:
