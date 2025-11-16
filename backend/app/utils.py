@@ -7,6 +7,25 @@ from sqlalchemy import select
 from .models import User
 from .auth import decrypt_password
 
+def _normalize_whitespace(value: str) -> str:
+    """Collapse multiple spaces and trim."""
+    return " ".join((value or "").strip().split())
+
+def format_category_name(name: str) -> str:
+    """Format category names for display consistently."""
+    normalized = _normalize_whitespace(name)
+    return normalized.title()
+
+def format_subcategory_name(name: str) -> str:
+    """Format sub-category names for display consistently."""
+    normalized = _normalize_whitespace(name)
+    return normalized.title()
+
+def format_account_name(name: str) -> str:
+    """Format account names for display consistently."""
+    normalized = _normalize_whitespace(name)
+    return normalized.title()
+
 async def get_user_decrypted_password(user_id: int, db: AsyncSession) -> Optional[str]:
     """
     Utility function to get a user's decrypted password.

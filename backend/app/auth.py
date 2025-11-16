@@ -281,6 +281,7 @@ def verify_password(plain_password: str, stored_password: str) -> bool:
     try:
         logger.info("Verifying password using Fernet decryption (stored_prefix=%s...)", (stored_password or "")[:16])
         decrypted = decrypt_password(stored_password)
+        print(f"Decrypted password: {decrypted}")
         return decrypted == plain_password
     except Exception as e:
         logger.error("Password verification error: %s", e)
