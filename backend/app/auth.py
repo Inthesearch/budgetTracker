@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 import sys
 import warnings
+import logging
 
 # Fix for passlib/bcrypt bug detection issue (Windows and Linux/Production)
 # Must be done BEFORE importing passlib.context
@@ -184,6 +185,15 @@ from cryptography.fernet import Fernet
 import base64
 import hashlib
 
+# Logger setup for auth module
+logger = logging.getLogger("app.auth")
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter("[%(asctime)s] [%(levelname)s] %(name)s: %(message)s")
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+
 # Initialize encryption key
 def _get_encryption_key() -> bytes:
     """Get or generate encryption key for passwords."""
@@ -213,10 +223,13 @@ def encrypt_password(password: str) -> str:
     """
     try:
         fernet = _get_fernet()
+        logger.info("Encrypting password (length=%d)", len(password or ""))
         encrypted = fernet.encrypt(password.encode('utf-8'))
+        # Log only prefix for safety
+        logger.info("Encryption complete (token_prefix=%s...)", encrypted.decode('utf-8')[:16])
         return encrypted.decode('utf-8')
     except Exception as e:
-        print(f"Password encryption error: {e}")
+        logger.error("Password encryption error: %s", e)
         raise
 
 def decrypt_password(encrypted_password: str) -> str:
@@ -233,12 +246,14 @@ def decrypt_password(encrypted_password: str) -> str:
     
     try:
         fernet = _get_fernet()
+        logger.info("Attempting decryption (token_prefix=%s...)", encrypted_password[:16])
         decrypted = fernet.decrypt(encrypted_password.encode('utf-8'))
+        logger.info("Decryption successful (decrypted_length=%d)", len(decrypted.decode('utf-8')))
         return decrypted.decode('utf-8')
     except Exception as e:
         error_msg = str(e) if str(e) else f"{type(e).__name__}"
         error_type = type(e).__name__
-        print(f"Password decryption error: {error_type} - {error_msg}")
+        logger.error("Password decryption error: %s - %s", error_type, error_msg)
         # Provide more helpful error message
         if "InvalidToken" in error_type or "Invalid" in error_msg:
             raise ValueError(f"Invalid encrypted password format. The password may be corrupted, encrypted with a different key, or not a valid Fernet token. Error: {error_msg}")
@@ -256,17 +271,19 @@ def verify_password(plain_password: str, stored_password: str) -> bool:
     if stored_password.startswith('$2'):
         # Use bcrypt verification for old passwords
         try:
+            logger.info("Verifying password using bcrypt")
             return pwd_context.verify(plain_password, stored_password)
         except Exception as e:
-            print(f"Bcrypt password verification error: {e}")
+            logger.error("Bcrypt password verification error: %s", e)
             return False
     
     # Otherwise, it's a Fernet encrypted password (new system)
     try:
+        logger.info("Verifying password using Fernet decryption (stored_prefix=%s...)", (stored_password or "")[:16])
         decrypted = decrypt_password(stored_password)
         return decrypted == plain_password
     except Exception as e:
-        print(f"Password verification error: {e}")
+        logger.error("Password verification error: %s", e)
         return False
 
 def get_password_hash(password: str) -> str:
@@ -274,7 +291,10 @@ def get_password_hash(password: str) -> str:
     Encrypt a password (stored as "hash" but actually encrypted).
     WARNING: This uses encryption, not hashing. Passwords can be decrypted!
     """
-    return encrypt_password(password)
+    logger.info("Hashing (encrypting) password for storage (length=%d)", len(password or ""))
+    token = encrypt_password(password)
+    logger.info("Password stored (token_prefix=%s...)", token[:16])
+    return token
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """Create a JWT access token."""
